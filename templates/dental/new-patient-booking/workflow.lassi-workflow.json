@@ -1,0 +1,356 @@
+{
+  "format": "lassi.workflow",
+  "format_version": 1,
+  "name": "Dental new-patient booking",
+  "description": "New-patient and existing-patient booking, insurance questions from the knowledge base, and dental emergencies put through to the office.",
+  "graph": {
+    "start": "reason",
+    "nodes": [
+      {
+        "id": "reason",
+        "type": "conversation",
+        "name": "Find out why they're calling",
+        "prompt": "Find out what the caller needs. If they already said it in their first words, move on right away instead of asking again. They may be calling for someone else, like a child or a parent.",
+        "edges": [
+          {
+            "to": "new_patient",
+            "when": {
+              "intent": "is a new patient, or calling for one, and wants to book a first visit, cleaning or exam"
+            },
+            "label": "New patient"
+          },
+          {
+            "to": "existing_visit",
+            "when": {
+              "intent": "is an existing patient who wants to book a visit"
+            },
+            "label": "Existing patient"
+          },
+          {
+            "to": "change_message",
+            "when": {
+              "intent": "wants to reschedule or cancel an appointment they already have"
+            }
+          },
+          {
+            "to": "questions",
+            "when": {
+              "intent": "has a question about insurance, payment, the office, or what a visit involves"
+            }
+          },
+          {
+            "to": "decline",
+            "when": {
+              "intent": "is a telemarketer, robocall or sales pitch"
+            }
+          },
+          {
+            "to": "message",
+            "when": {
+              "else": true
+            }
+          }
+        ]
+      },
+      {
+        "id": "questions",
+        "type": "knowledge",
+        "name": "Insurance and office questions",
+        "prompt": "Answer questions about the insurance plans the office accepts, payment options, location, parking and what a first visit involves. Never guess whether a specific plan covers a treatment or what it will cost; offer to have the front desk check and call back.",
+        "edges": [
+          {
+            "to": "new_patient",
+            "when": {
+              "intent": "wants to book a visit as a new patient"
+            }
+          },
+          {
+            "to": "existing_visit",
+            "when": {
+              "intent": "wants to book a visit as an existing patient"
+            }
+          },
+          {
+            "to": "goodbye",
+            "when": {
+              "intent": "says they're all set"
+            }
+          },
+          {
+            "to": "reason",
+            "when": {
+              "else": true
+            }
+          }
+        ]
+      },
+      {
+        "id": "new_patient",
+        "type": "collect",
+        "name": "New patient details",
+        "prompt": "Get what the office needs to set up the new patient. Ask one thing at a time. If they're booking for someone else, get that person's name, not the caller's.",
+        "fields": ["patient_name", "visit_reason", "insurance_provider"],
+        "optional_fields": ["insurance_provider"],
+        "then": "book_new"
+      },
+      {
+        "id": "book_new",
+        "type": "action",
+        "name": "Book the first visit",
+        "action": "book_appointment",
+        "prompt": "Book a new-patient visit for {{fields.patient_name}}. Offer two open times from availability, such as the soonest, or ones near a day the caller already mentioned. If neither works, ask what day or time of day suits them and offer the closest open times. As soon as the caller picks one, book it; don't ask them to confirm first.",
+        "then": "booked_new",
+        "on_error": "message"
+      },
+      {
+        "id": "booked_new",
+        "type": "conversation",
+        "name": "Confirm the first visit",
+        "prompt": "The visit is booked. Confirm the day and time in one short sentence. Ask them to arrive 15 minutes early to fill in new-patient forms and to bring their insurance card and a photo ID. Then ask if there's anything else.",
+        "edges": [
+          {
+            "to": "goodbye",
+            "when": {
+              "else": true
+            }
+          }
+        ]
+      },
+      {
+        "id": "existing_visit",
+        "type": "collect",
+        "name": "Visit details",
+        "prompt": "Get who the visit is for and what it's for.",
+        "fields": ["patient_name", "visit_reason"],
+        "then": "book_existing"
+      },
+      {
+        "id": "book_existing",
+        "type": "action",
+        "name": "Book the visit",
+        "action": "book_appointment",
+        "prompt": "Offer two open times from availability, such as the soonest, or ones near a day the caller already mentioned. If neither works, ask what day or time of day suits them and offer the closest open times. As soon as the caller picks one, book it; don't ask them to confirm first.",
+        "then": "booked_existing",
+        "on_error": "message"
+      },
+      {
+        "id": "booked_existing",
+        "type": "conversation",
+        "name": "Confirm the visit",
+        "prompt": "The visit is booked. Confirm the day and time in one short sentence and ask if there's anything else.",
+        "edges": [
+          {
+            "to": "goodbye",
+            "when": {
+              "else": true
+            }
+          }
+        ]
+      },
+      {
+        "id": "change_message",
+        "type": "action",
+        "name": "Message about a change",
+        "action": "take_message",
+        "prompt": "The front desk handles changes to existing appointments. Take a message with the patient's name and the appointment they want to change or cancel. As soon as you have their name, best callback number and what they need, call take_message right away and read the number back in the same reply. Don't ask them to confirm details you already have, and don't wait for another turn first.",
+        "then": "message_taken"
+      },
+      {
+        "id": "urgent",
+        "type": "action",
+        "name": "Flag the emergency",
+        "action": "flag_urgent",
+        "then": "office_open"
+      },
+      {
+        "id": "office_open",
+        "type": "condition",
+        "name": "Is the office open?",
+        "edges": [
+          {
+            "to": "transfer_office",
+            "when": {
+              "booking_hours": true
+            },
+            "label": "Open"
+          },
+          {
+            "to": "urgent_message",
+            "when": {
+              "else": true
+            }
+          }
+        ]
+      },
+      {
+        "id": "transfer_office",
+        "type": "transfer",
+        "name": "Put them through to the office",
+        "to": "{{variables.office_number}}",
+        "mode": "warm",
+        "message": "I'm getting someone from the office for you now. Please stay on the line.",
+        "fallback": "urgent_message"
+      },
+      {
+        "id": "urgent_message",
+        "type": "action",
+        "name": "Urgent message",
+        "action": "take_message",
+        "prompt": "You've marked this urgent for the dentist. If the caller has swelling that affects breathing or swallowing, a high fever, or bleeding that won't stop, tell them to go to the emergency room or call 911 now. Otherwise take a message for the on-call dentist. As soon as you have their name, best callback number and what they need, call take_message right away and read the number back in the same reply. Don't ask them to confirm details you already have, and don't wait for another turn first. Never give medical advice or promise a callback time.",
+        "then": "message_taken"
+      },
+      {
+        "id": "message",
+        "type": "action",
+        "name": "Take a message",
+        "action": "take_message",
+        "prompt": "Take a message for the front desk. As soon as you have their name, best callback number and what they need, call take_message right away and read the number back in the same reply. Don't ask them to confirm details you already have, and don't wait for another turn first.",
+        "then": "message_taken"
+      },
+      {
+        "id": "message_taken",
+        "type": "conversation",
+        "name": "Wrap up the message",
+        "prompt": "The message is saved. Tell the caller the office will call back during business hours and ask if there's anything else.",
+        "edges": [
+          {
+            "to": "goodbye",
+            "when": {
+              "else": true
+            }
+          }
+        ]
+      },
+      {
+        "id": "decline",
+        "type": "end",
+        "name": "Decline politely",
+        "message": "Politely say the business isn't interested, without sharing any business details."
+      },
+      {
+        "id": "goodbye",
+        "type": "end",
+        "name": "Goodbye"
+      }
+    ],
+    "global_edges": [
+      {
+        "to": "urgent",
+        "when": {
+          "intent": "describes a dental emergency: severe tooth pain, swelling in the face or jaw, a knocked-out or broken tooth, or bleeding that won't stop"
+        }
+      }
+    ]
+  },
+  "layout": {
+    "nodes": {
+      "reason": {
+        "x": 0,
+        "y": 0
+      },
+      "questions": {
+        "x": -750,
+        "y": 180
+      },
+      "new_patient": {
+        "x": -450,
+        "y": 180
+      },
+      "book_new": {
+        "x": -450,
+        "y": 360
+      },
+      "booked_new": {
+        "x": -150,
+        "y": 540
+      },
+      "existing_visit": {
+        "x": -150,
+        "y": 180
+      },
+      "book_existing": {
+        "x": -150,
+        "y": 360
+      },
+      "booked_existing": {
+        "x": 150,
+        "y": 540
+      },
+      "change_message": {
+        "x": 150,
+        "y": 180
+      },
+      "urgent": {
+        "x": 1110,
+        "y": 180
+      },
+      "office_open": {
+        "x": 1110,
+        "y": 360
+      },
+      "transfer_office": {
+        "x": 1110,
+        "y": 540
+      },
+      "urgent_message": {
+        "x": 1410,
+        "y": 540
+      },
+      "message": {
+        "x": 450,
+        "y": 180
+      },
+      "message_taken": {
+        "x": 150,
+        "y": 360
+      },
+      "decline": {
+        "x": 750,
+        "y": 180
+      },
+      "goodbye": {
+        "x": 450,
+        "y": 360
+      }
+    }
+  },
+  "fields": [
+    {
+      "key": "patient_name",
+      "label": "Patient name",
+      "type": "string",
+      "description": "Full name of the person the visit is for, which may not be the caller.",
+      "collect": "required",
+      "options": [],
+      "crm_field": null
+    },
+    {
+      "key": "visit_reason",
+      "label": "Reason for visit",
+      "type": "enum",
+      "description": "What the visit is for.",
+      "collect": "required",
+      "options": ["cleaning_and_exam", "tooth_pain", "cosmetic_consult", "second_opinion", "other"],
+      "crm_field": null
+    },
+    {
+      "key": "insurance_provider",
+      "label": "Dental insurance",
+      "type": "string",
+      "description": "Name of the patient's dental insurance, or none.",
+      "collect": "optional",
+      "options": [],
+      "crm_field": null
+    },
+    {
+      "key": "how_heard",
+      "label": "How they heard about us",
+      "type": "string",
+      "description": "Referral or marketing source, if mentioned.",
+      "collect": "extract_only",
+      "options": [],
+      "crm_field": null
+    }
+  ],
+  "needs_setup": []
+}

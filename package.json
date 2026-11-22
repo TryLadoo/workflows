@@ -1,0 +1,52 @@
+{
+  "name": "@tryladoo/workflows",
+  "version": "0.1.0",
+  "description": "JSON Schema, validator and templates for Ladoo call workflow files (.lassi-workflow.json).",
+  "license": "MIT",
+  "author": "Ladoo LLC",
+  "homepage": "https://tryladoo.com/docs/developers/workflow-file-format",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TryLadoo/workflows.git"
+  },
+  "bugs": "https://github.com/TryLadoo/workflows/issues",
+  "keywords": [
+    "ladoo",
+    "workflow",
+    "json-schema",
+    "voice-agent",
+    "ai-receptionist"
+  ],
+  "type": "module",
+  "bin": {
+    "lassi-workflow": "scripts/validate.mjs"
+  },
+  "exports": {
+    ".": "./lib/check.mjs",
+    "./mermaid": "./lib/mermaid.mjs",
+    "./schema.json": "./schema/lassi-workflow.schema.json"
+  },
+  "files": [
+    "lib",
+    "schema",
+    "scripts/validate.mjs",
+    "templates"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "validate": "node scripts/validate.mjs",
+    "diagram": "node scripts/diagram.mjs",
+    "lint": "prettier --check . && node scripts/diagram.mjs --check",
+    "format": "prettier --write .",
+    "typecheck": "tsc",
+    "test": "node --test"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "ajv": "^8.17.1",
+    "prettier": "^3.4.2",
+    "typescript": "^5.7.2"
+  }
+}

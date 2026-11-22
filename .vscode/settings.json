@@ -1,0 +1,8 @@
+{
+  "json.schemas": [
+    {
+      "fileMatch": ["*.lassi-workflow.json"],
+      "url": "./schema/lassi-workflow.schema.json"
+    }
+  ]
+}

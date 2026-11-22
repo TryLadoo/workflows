@@ -1,0 +1,1045 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/TryLadoo/workflows/main/schema/lassi-workflow.schema.json",
+  "title": "Ladoo workflow file (.lassi-workflow.json)",
+  "description": "One Ladoo agent's call workflow: its steps, how they connect, the details it collects and where each step sits on the canvas. Format version 1. See https://tryladoo.com/docs/developers/workflow-file-format",
+  "type": "object",
+  "required": ["format", "format_version", "graph"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "description": "Optional pointer to this schema, so editors validate and autocomplete the file. Ladoo ignores it.",
+      "type": "string"
+    },
+    "format": {
+      "description": "Identifies the file as a Ladoo workflow. Always \"lassi.workflow\".",
+      "const": "lassi.workflow"
+    },
+    "format_version": {
+      "description": "Version of the file format. Always 1 for now. A change that older files can't follow gets a new number.",
+      "const": 1
+    },
+    "name": {
+      "description": "A name for the workflow, like \"Rivera Plumbing front desk\".",
+      "type": "string"
+    },
+    "description": {
+      "description": "A sentence about what the workflow does.",
+      "type": "string"
+    },
+    "graph": {
+      "$ref": "#/$defs/graph"
+    },
+    "layout": {
+      "$ref": "#/$defs/layout"
+    },
+    "fields": {
+      "description": "The details the workflow collects. Collect steps name them by `key`, and later steps use them as {{fields.<key>}}. On import, a field the agent already has keeps the agent's own definition; new fields are added.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/field"
+      }
+    },
+    "needs_setup": {
+      "description": "What an export left out because it belongs to one workspace or is a secret. Each entry must be filled in after import before the draft can be published.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/needsSetup"
+      }
+    },
+    "exported_at": {
+      "description": "When the file was exported, as an ISO 8601 date-time.",
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "$defs": {
+    "stepId": {
+      "description": "A step's id: letters, numbers, dashes and underscores, unique in the file.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+$"
+    },
+    "fieldKey": {
+      "description": "A field key: lowercase letters, numbers and underscores, starting with a letter. Up to 64 characters.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{0,63}$"
+    },
+    "valueName": {
+      "description": "The name of a value a step saves, used later as {{variables.<name>}}. Can't start with caller_ or reuse a business setting's name.",
+      "type": "string",
+      "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$"
+    },
+    "scalar": {
+      "description": "A string, number or true/false.",
+      "type": ["string", "number", "boolean"]
+    },
+    "graph": {
+      "description": "The steps and how they connect.",
+      "type": "object",
+      "required": ["start", "nodes"],
+      "additionalProperties": false,
+      "properties": {
+        "start": {
+          "description": "The id of the step every call starts with. The greeting is said before it, so the first step shouldn't greet again.",
+          "$ref": "#/$defs/stepId"
+        },
+        "nodes": {
+          "description": "The steps.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/node"
+          }
+        },
+        "global_edges": {
+          "description": "Branches that apply on every step that talks to the caller, like \"the caller describes an emergency\". The caller can take one from wherever they are in the call. They don't apply at a Condition step. Shown in the editor under Whole call → Anytime the caller…",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/edge"
+          }
+        }
+      }
+    },
+    "edge": {
+      "description": "A branch to another step. The agent takes the first branch that matches, top to bottom.",
+      "type": "object",
+      "required": ["to", "when"],
+      "additionalProperties": false,
+      "properties": {
+        "to": {
+          "description": "The id of the step this branch goes to.",
+          "$ref": "#/$defs/stepId"
+        },
+        "when": {
+          "$ref": "#/$defs/when"
+        },
+        "label": {
+          "description": "A short label shown on the canvas, like \"Renter\".",
+          "type": "string"
+        }
+      }
+    },
+    "when": {
+      "description": "When the branch matches. One of: intent, else, a field or variable check, time_window or booking_hours.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/whenIntent"
+        },
+        {
+          "$ref": "#/$defs/whenElse"
+        },
+        {
+          "$ref": "#/$defs/whenField"
+        },
+        {
+          "$ref": "#/$defs/whenVariable"
+        },
+        {
+          "$ref": "#/$defs/whenTimeWindow"
+        },
+        {
+          "$ref": "#/$defs/whenBookingHours"
+        }
+      ]
+    },
+    "whenIntent": {
+      "description": "Matches when the caller's words fit the description. The agent decides. Write it to finish the sentence \"When the caller…\".",
+      "type": "object",
+      "required": ["intent"],
+      "additionalProperties": false,
+      "properties": {
+        "intent": {
+          "description": "What the caller says or wants, finishing \"When the caller…\", like \"wants a plumber to come out\".",
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "whenElse": {
+      "description": "Matches when no other branch did (Otherwise). One per step, and not together with `then`.",
+      "type": "object",
+      "required": ["else"],
+      "additionalProperties": false,
+      "properties": {
+        "else": {
+          "description": "Always true.",
+          "const": true
+        }
+      }
+    },
+    "whenField": {
+      "description": "Matches on a detail collected on this call. Takes exactly one of `equals`, `in` or `exists`.",
+      "type": "object",
+      "required": ["field"],
+      "additionalProperties": false,
+      "properties": {
+        "field": {
+          "description": "The key of a field in `fields`.",
+          "$ref": "#/$defs/fieldKey"
+        },
+        "equals": {
+          "description": "Matches when the detail is exactly this value.",
+          "$ref": "#/$defs/scalar"
+        },
+        "in": {
+          "description": "Matches when the detail is any of these values.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/scalar"
+          }
+        },
+        "exists": {
+          "description": "true matches when the caller gave the detail; false when they didn't.",
+          "type": "boolean"
+        },
+        "not": {
+          "description": "Flip the check.",
+          "type": "boolean"
+        }
+      },
+      "oneOf": [
+        {
+          "required": ["equals"]
+        },
+        {
+          "required": ["in"]
+        },
+        {
+          "required": ["exists"]
+        }
+      ]
+    },
+    "whenVariable": {
+      "description": "Matches on a variable: a business setting, or a value an earlier Webhook or Custom code step saved. Takes exactly one of `equals`, `in` or `exists`.",
+      "type": "object",
+      "required": ["variable"],
+      "additionalProperties": false,
+      "properties": {
+        "variable": {
+          "description": "The variable's name, without braces, like \"plan\".",
+          "type": "string",
+          "minLength": 1
+        },
+        "equals": {
+          "description": "Matches when the variable is exactly this value.",
+          "$ref": "#/$defs/scalar"
+        },
+        "in": {
+          "description": "Matches when the variable is any of these values.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/scalar"
+          }
+        },
+        "exists": {
+          "description": "true matches when the variable has a value; false when it doesn't.",
+          "type": "boolean"
+        },
+        "not": {
+          "description": "Flip the check.",
+          "type": "boolean"
+        }
+      },
+      "oneOf": [
+        {
+          "required": ["equals"]
+        },
+        {
+          "required": ["in"]
+        },
+        {
+          "required": ["exists"]
+        }
+      ]
+    },
+    "whenTimeWindow": {
+      "description": "Matches when the call is in this window, in the business's time zone. Don't put a time check in front of booking: the calendar only offers open times, so callers can book at any hour.",
+      "type": "object",
+      "required": ["time_window"],
+      "additionalProperties": false,
+      "properties": {
+        "time_window": {
+          "description": "Days and hours, in the business's time zone.",
+          "type": "object",
+          "required": ["days", "start", "end"],
+          "additionalProperties": false,
+          "properties": {
+            "days": {
+              "description": "The days the window covers.",
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "enum": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+              }
+            },
+            "start": {
+              "description": "Start time, 24-hour HH:MM, like \"08:00\".",
+              "type": "string",
+              "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+            },
+            "end": {
+              "description": "End time, 24-hour HH:MM, like \"17:00\".",
+              "type": "string",
+              "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+            }
+          }
+        },
+        "not": {
+          "description": "Flip the check: match when the call is outside the window.",
+          "type": "boolean"
+        }
+      }
+    },
+    "whenBookingHours": {
+      "description": "Matches when the call is during the booking hours set in Calendar → Settings. Never matches when the agent doesn't book into a Google, Outlook or calendar-link calendar.",
+      "type": "object",
+      "required": ["booking_hours"],
+      "additionalProperties": false,
+      "properties": {
+        "booking_hours": {
+          "description": "Always true. Use `not` for outside booking hours.",
+          "const": true
+        },
+        "not": {
+          "description": "Flip the check: match when the call is outside booking hours.",
+          "type": "boolean"
+        }
+      }
+    },
+    "edges": {
+      "description": "Branches, each { to, when }. The agent takes the first that matches.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/edge"
+      }
+    },
+    "then": {
+      "description": "The step to go to when this one is done.",
+      "$ref": "#/$defs/stepId"
+    },
+    "onError": {
+      "description": "The step to go to when this one fails, like a booking that couldn't be made, a webhook that didn't answer or code that threw.",
+      "$ref": "#/$defs/stepId"
+    },
+    "prompt": {
+      "description": "Instructions for the agent in this step, written like a brief to a new receptionist. Can use {{variables}} and {{fields.<key>}}. Keep facts like prices and hours in the knowledge base.",
+      "type": "string"
+    },
+    "nodeId": {
+      "description": "The step's id: letters, numbers, dashes and underscores, unique in the file.",
+      "$ref": "#/$defs/stepId"
+    },
+    "nodeName": {
+      "description": "The step's name, shown on the canvas. Only you see it.",
+      "type": "string"
+    },
+    "node": {
+      "description": "A step. Its keys depend on `type`.",
+      "type": "object",
+      "required": ["id", "type"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/nodeId"
+        },
+        "type": {
+          "description": "The step type: conversation, collect, action, condition, knowledge, transfer, code, webhook or end. A CRM (LeadConnector) step has a short code of its own; keep it as exported.",
+          "anyOf": [
+            {
+              "enum": [
+                "conversation",
+                "collect",
+                "action",
+                "condition",
+                "knowledge",
+                "transfer",
+                "code",
+                "webhook",
+                "end"
+              ]
+            },
+            {
+              "type": "string",
+              "minLength": 1
+            }
+          ]
+        },
+        "name": {
+          "$ref": "#/$defs/nodeName"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": ["type"],
+            "properties": {
+              "type": {
+                "const": "conversation"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/$defs/conversationStep"
+          }
+        },
+        {
+          "if": {
+            "required": ["type"],
+            "properties": {
+              "type": {
+                "const": "collect"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/$defs/collectStep"
+          }
+        },
+        {
+          "if": {
+            "required": ["type"],
+            "properties": {
+              "type": {
+                "const": "action"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/$defs/actionStep"
+          }
+        },
+        {
+          "if": {
+            "required": ["type"],
+            "properties": {
+              "type": {
+                "const": "condition"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/$defs/conditionStep"
+          }
+        },
+        {
+          "if": {
+            "required": ["type"],
+            "properties": {
+              "type": {
+                "const": "knowledge"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/$defs/knowledgeStep"
+          }
+        },
+        {
+          "if": {
+            "required": ["type"],
+            "properties": {
+              "type": {
+                "const": "transfer"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/$defs/transferStep"
+          }
+        },
+        {
+          "if": {
+            "required": ["type"],
+            "properties": {
+              "type": {
+                "const": "code"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/$defs/codeStep"
+          }
+        },
+        {
+          "if": {
+            "required": ["type"],
+            "properties": {
+              "type": {
+                "const": "webhook"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/$defs/webhookStep"
+          }
+        },
+        {
+          "if": {
+            "required": ["type"],
+            "properties": {
+              "type": {
+                "const": "end"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/$defs/endStep"
+          }
+        },
+        {
+          "if": {
+            "required": ["type"],
+            "properties": {
+              "type": {
+                "enum": [
+                  "conversation",
+                  "collect",
+                  "action",
+                  "condition",
+                  "knowledge",
+                  "transfer",
+                  "code",
+                  "webhook",
+                  "end"
+                ]
+              }
+            }
+          },
+          "else": {
+            "$ref": "#/$defs/crmStep"
+          }
+        }
+      ]
+    },
+    "conversationStep": {
+      "title": "Talk step",
+      "description": "A Talk step: the agent has a conversation with one goal and follows `prompt` until a branch or `then` applies.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/nodeId"
+        },
+        "type": {
+          "const": "conversation"
+        },
+        "name": {
+          "$ref": "#/$defs/nodeName"
+        },
+        "prompt": {
+          "$ref": "#/$defs/prompt"
+        },
+        "edges": {
+          "$ref": "#/$defs/edges"
+        },
+        "then": {
+          "$ref": "#/$defs/then"
+        }
+      }
+    },
+    "collectStep": {
+      "title": "Collect info step",
+      "description": "Asks for the listed details, one at a time, and moves on once it has them. Don't list a phone field: on a phone call the agent confirms the number the caller is calling from instead.",
+      "type": "object",
+      "required": ["fields"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/nodeId"
+        },
+        "type": {
+          "const": "collect"
+        },
+        "name": {
+          "$ref": "#/$defs/nodeName"
+        },
+        "prompt": {
+          "$ref": "#/$defs/prompt"
+        },
+        "fields": {
+          "description": "Keys of the fields to ask for. Each must be in the top-level `fields` list and not be extract_only.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/fieldKey"
+          }
+        },
+        "optional_fields": {
+          "description": "Keys from `fields` the caller may skip here (Optional here). Others must be answered before the step finishes.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/fieldKey"
+          }
+        },
+        "then": {
+          "$ref": "#/$defs/then"
+        },
+        "edges": {
+          "$ref": "#/$defs/edges"
+        }
+      }
+    },
+    "actionStep": {
+      "title": "Action step",
+      "description": "Runs a built-in action. The action must be turned on for the agent.",
+      "type": "object",
+      "required": ["action"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/nodeId"
+        },
+        "type": {
+          "const": "action"
+        },
+        "name": {
+          "$ref": "#/$defs/nodeName"
+        },
+        "action": {
+          "description": "book_appointment books a time in the agent's calendar; take_message saves a name, callback number and message; flag_urgent marks the call urgent; check_availability looks up open times.",
+          "enum": ["book_appointment", "take_message", "flag_urgent", "check_availability"]
+        },
+        "prompt": {
+          "$ref": "#/$defs/prompt"
+        },
+        "then": {
+          "$ref": "#/$defs/then"
+        },
+        "on_error": {
+          "$ref": "#/$defs/onError"
+        }
+      }
+    },
+    "conditionStep": {
+      "title": "Condition step",
+      "description": "Branches on details, variables or the time of the call, without saying anything. Checks run top to bottom; every Condition needs an else (Otherwise).",
+      "type": "object",
+      "required": ["edges"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/nodeId"
+        },
+        "type": {
+          "const": "condition"
+        },
+        "name": {
+          "$ref": "#/$defs/nodeName"
+        },
+        "edges": {
+          "$ref": "#/$defs/edges"
+        }
+      }
+    },
+    "knowledgeStep": {
+      "title": "Answer questions step",
+      "description": "Answers questions from knowledge bases. The agent takes else (or then) as soon as it has answered a question, so send it back to a step that asks what else the caller needs rather than straight to an end.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/nodeId"
+        },
+        "type": {
+          "const": "knowledge"
+        },
+        "name": {
+          "$ref": "#/$defs/nodeName"
+        },
+        "prompt": {
+          "$ref": "#/$defs/prompt"
+        },
+        "kb_ids": {
+          "description": "Knowledge bases to answer from. Empty or missing uses every knowledge base attached to the agent. Workspace-specific, so export leaves it out.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        },
+        "edges": {
+          "$ref": "#/$defs/edges"
+        },
+        "then": {
+          "$ref": "#/$defs/then"
+        }
+      }
+    },
+    "transferStep": {
+      "title": "Transfer step",
+      "description": "Puts the caller through to whoever is on call in a team, or to one number. If nobody answers, the call goes to `fallback`.",
+      "type": "object",
+      "required": ["fallback"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/nodeId"
+        },
+        "type": {
+          "const": "transfer"
+        },
+        "name": {
+          "$ref": "#/$defs/nodeName"
+        },
+        "team_id": {
+          "description": "The team whose on-call list to ring, one at a time. Use this or `to`. Workspace-specific, so export leaves it out.",
+          "type": ["string", "null"]
+        },
+        "to": {
+          "description": "The number to dial: E.164 (US and Canada only, like \"+15125550187\") or a business setting like \"{{variables.oncall_number}}\". Use this or `team_id`.",
+          "type": ["string", "null"],
+          "pattern": "^(\\+1[2-9][0-9]{9}|\\{\\{\\s*variables\\.[A-Za-z_][A-Za-z0-9_]*\\s*\\}\\}|)$"
+        },
+        "mode": {
+          "description": "cold: say who's calling, then connect. warm: brief the person and let them accept (say yes or press 1).",
+          "enum": ["cold", "warm"]
+        },
+        "message": {
+          "description": "What the caller hears before the hold music, like \"I'm putting you through to our on-call technician now.\"",
+          "type": "string"
+        },
+        "fallback": {
+          "description": "The step to go to when nobody answers (If nobody answers). Required, so no caller is left on hold.",
+          "$ref": "#/$defs/stepId"
+        }
+      }
+    },
+    "codeStep": {
+      "title": "Custom code step",
+      "description": "Runs the body of a JavaScript function `run({ fields, variables, caller, now })` in a sandbox (no network, files, timers or console; 200 ms, 16 MB). It must return an object.",
+      "type": "object",
+      "required": ["code", "outputs"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/nodeId"
+        },
+        "type": {
+          "const": "code"
+        },
+        "name": {
+          "$ref": "#/$defs/nodeName"
+        },
+        "code": {
+          "description": "The function body. Up to 16 KB. Reads `fields`, `variables`, `caller` and `now`, and must `return` an object.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 16384
+        },
+        "outputs": {
+          "description": "Keys of the returned object to keep (Values it returns), up to 20. Later steps use them as {{variables.<name>}}. Other keys are dropped. Each value must be a string, number, true, false or null.",
+          "type": "array",
+          "maxItems": 20,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/valueName"
+          }
+        },
+        "say": {
+          "description": "What the agent says while the code runs (Say while it runs). Usually not needed.",
+          "type": "string"
+        },
+        "then": {
+          "$ref": "#/$defs/then"
+        },
+        "on_error": {
+          "$ref": "#/$defs/onError"
+        }
+      }
+    },
+    "webhookStep": {
+      "title": "Webhook step",
+      "description": "Calls your own server during the call (https only, 8-second timeout, 2xx is success, no retries, no redirects) and saves values from its JSON reply.",
+      "type": "object",
+      "required": ["method", "url"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/nodeId"
+        },
+        "type": {
+          "const": "webhook"
+        },
+        "name": {
+          "$ref": "#/$defs/nodeName"
+        },
+        "method": {
+          "description": "GET sends no body.",
+          "enum": ["GET", "POST", "PUT", "PATCH"]
+        },
+        "url": {
+          "description": "https:// address on port 443, on a public host. Placeholders can go in the path and query (URL-encoded), not the domain.",
+          "type": "string",
+          "pattern": "^https://"
+        },
+        "headers": {
+          "description": "Headers to add, like Authorization. Values are left out on export unless they only refer to workspace secrets, like \"Bearer {{secrets.DISPATCH_API_KEY}}\".",
+          "anyOf": [
+            {
+              "type": "object",
+              "propertyNames": {
+                "pattern": "^[A-Za-z0-9-]{1,64}$"
+              },
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["name", "value"],
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "description": "Header name.",
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9-]{1,64}$"
+                  },
+                  "value": {
+                    "description": "Header value.",
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "body": {
+          "description": "The JSON template to send, with placeholders like \"{{fields.service_address}}\" or \"{caller_phone}\" in quotes. A string that's exactly one placeholder keeps the value's own type.",
+          "type": ["string", "object", "array"]
+        },
+        "save": {
+          "description": "Values to save from the JSON reply (Save from the reply): a name and a dot path, like job.technician.first_name or jobs.0.status. Saved as {{variables.<name>}}, cut at 500 characters.",
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["name", "path"],
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "$ref": "#/$defs/valueName"
+                  },
+                  "path": {
+                    "description": "Dot path into the reply.",
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            },
+            {
+              "type": "object",
+              "propertyNames": {
+                "$ref": "#/$defs/valueName"
+              },
+              "additionalProperties": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          ]
+        },
+        "say": {
+          "description": "What the agent says while the request runs (Say while waiting), like \"One moment while I pull up your job.\"",
+          "type": "string"
+        },
+        "then": {
+          "$ref": "#/$defs/then"
+        },
+        "on_error": {
+          "$ref": "#/$defs/onError"
+        }
+      }
+    },
+    "crmStep": {
+      "title": "LeadConnector (CRM) step",
+      "description": "Updates the caller's contact in the LeadConnector CRM connection while they're on the line. Its `type` is a short code; keep it as exported.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/nodeId"
+        },
+        "type": {
+          "description": "The CRM step's type code, kept as exported.",
+          "type": "string"
+        },
+        "name": {
+          "$ref": "#/$defs/nodeName"
+        },
+        "add_tags": {
+          "description": "Tags to add to the contact, up to 64 characters each. A tag can start a CRM automation (Contact tag added).",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          }
+        },
+        "note": {
+          "description": "A note to add, up to 5,000 characters. Can use {{fields.<key>}} and {{variables.<name>}}.",
+          "type": "string",
+          "maxLength": 5000
+        },
+        "contact_fields": {
+          "description": "Standard contact fields to fill from collected details, like street address from service_address."
+        },
+        "pipeline_id": {
+          "description": "Pipeline to move the opportunity in. Workspace-specific, so export leaves it out.",
+          "type": ["string", "null"]
+        },
+        "stage_id": {
+          "description": "Stage to move the opportunity to. Workspace-specific, so export leaves it out.",
+          "type": ["string", "null"]
+        },
+        "stage_name": {
+          "description": "The stage's name, for people reading the file.",
+          "type": ["string", "null"]
+        },
+        "then": {
+          "$ref": "#/$defs/then"
+        },
+        "on_error": {
+          "$ref": "#/$defs/onError"
+        }
+      }
+    },
+    "endStep": {
+      "title": "End call step",
+      "description": "Says goodbye and ends the call. Has no paths out.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/nodeId"
+        },
+        "type": {
+          "const": "end"
+        },
+        "name": {
+          "$ref": "#/$defs/nodeName"
+        },
+        "message": {
+          "description": "How the agent should say goodbye, like \"Thank them for calling and wish them a good night.\" Empty uses a normal goodbye.",
+          "type": "string"
+        }
+      }
+    },
+    "layout": {
+      "description": "Where each step sits on the canvas. Never affects how calls run. Steps without a position are placed for you.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "nodes": {
+          "description": "Maps a step's id to its canvas position.",
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/stepId"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "required": ["x", "y"],
+            "additionalProperties": false,
+            "properties": {
+              "x": {
+                "description": "Horizontal position.",
+                "type": "number"
+              },
+              "y": {
+                "description": "Vertical position.",
+                "type": "number"
+              }
+            }
+          }
+        }
+      }
+    },
+    "field": {
+      "description": "A detail the workflow collects.",
+      "type": "object",
+      "required": ["key", "label", "type", "collect"],
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/fieldKey"
+        },
+        "label": {
+          "description": "The name people see, like \"Service address\".",
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "description": "The kind of value.",
+          "enum": ["string", "number", "boolean", "date", "phone", "email", "enum"]
+        },
+        "options": {
+          "description": "For type enum: the allowed values.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "description": {
+          "description": "A hint for the agent about what to ask for.",
+          "type": "string"
+        },
+        "collect": {
+          "description": "required: always asked. optional: asked, but fine if the caller doesn't know. extract_only: picked up from the conversation, never asked for (and can't be listed in a Collect step).",
+          "enum": ["required", "optional", "extract_only"]
+        },
+        "crm_field": {
+          "description": "Where the detail is saved in your CRM, or null. Workspace-specific, so export leaves it out.",
+          "type": ["string", "null"]
+        }
+      },
+      "if": {
+        "required": ["type"],
+        "properties": {
+          "type": {
+            "const": "enum"
+          }
+        }
+      },
+      "then": {
+        "required": ["options"],
+        "properties": {
+          "options": {
+            "type": "array",
+            "minItems": 1
+          }
+        }
+      }
+    },
+    "needsSetup": {
+      "description": "Something an export left out that must be filled in after import.",
+      "type": "object",
+      "required": ["kind", "message"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "description": "phone_number: a transfer's number or team. webhook_header: a webhook header value. knowledge_base: a knowledge step's knowledge bases. pipeline_stage: a CRM step's pipeline and stage. crm_field: where a field is saved in your CRM.",
+          "enum": ["phone_number", "webhook_header", "knowledge_base", "pipeline_stage", "crm_field"]
+        },
+        "node_id": {
+          "description": "The step it belongs to, or null.",
+          "type": ["string", "null"]
+        },
+        "field_key": {
+          "description": "The field it belongs to (for crm_field), or null.",
+          "type": ["string", "null"]
+        },
+        "message": {
+          "description": "What to fill in, like \"Choose who to transfer to.\"",
+          "type": "string"
+        }
+      }
+    }
+  }
+}

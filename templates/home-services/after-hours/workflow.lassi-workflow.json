@@ -1,0 +1,221 @@
+{
+  "format": "lassi.workflow",
+  "format_version": 1,
+  "name": "After-hours receptionist",
+  "description": "Books visits, takes messages and flags emergencies while the office is closed.",
+  "graph": {
+    "start": "greet",
+    "nodes": [
+      {
+        "id": "greet",
+        "type": "conversation",
+        "name": "Find out why they're calling",
+        "prompt": "Find out what the caller needs. If they already said it in their first words, move on right away instead of asking again.",
+        "edges": [
+          {
+            "to": "booking",
+            "when": {
+              "intent": "wants a technician visit, a repair or an appointment"
+            }
+          },
+          {
+            "to": "message",
+            "when": {
+              "intent": "wants a quote, a callback, or to leave a message, and does not want to book a visit yet"
+            }
+          },
+          {
+            "to": "decline",
+            "when": {
+              "intent": "is a telemarketer, robocall or sales pitch"
+            }
+          }
+        ]
+      },
+      {
+        "id": "booking",
+        "type": "collect",
+        "name": "Get the job details",
+        "prompt": "Before booking, get the details for the visit.",
+        "fields": ["service_address", "equipment_type"],
+        "then": "schedule",
+        "edges": [
+          {
+            "to": "message",
+            "when": {
+              "intent": "would rather leave a message than book a visit"
+            }
+          }
+        ]
+      },
+      {
+        "id": "schedule",
+        "type": "action",
+        "name": "Book the visit",
+        "action": "book_appointment",
+        "prompt": "Offer two open times from availability, such as the soonest, or ones near a day the caller already mentioned. If neither works, ask what day or time of day suits them and offer the closest open times. As soon as the caller picks one, book it; don't ask them to confirm first.",
+        "then": "booked",
+        "on_error": "message"
+      },
+      {
+        "id": "booked",
+        "type": "conversation",
+        "name": "Confirm the booking",
+        "prompt": "The visit is booked. Confirm the day and time in one short sentence and ask if there's anything else.",
+        "edges": [
+          {
+            "to": "end",
+            "when": {
+              "else": true
+            }
+          }
+        ]
+      },
+      {
+        "id": "emergency",
+        "type": "action",
+        "name": "Flag the emergency",
+        "action": "flag_urgent",
+        "then": "emergency_followup"
+      },
+      {
+        "id": "emergency_followup",
+        "type": "conversation",
+        "name": "Reassure and get contact details",
+        "prompt": "You've marked this urgent for the team. If the caller smells gas, first tell them to leave the home now and call 911 or the gas company. Otherwise give one sensible safety tip if it helps, such as shutting off the main water valve for a leak. Make sure you have the caller's name and the best callback number (read it back). Tell them someone will call back as soon as possible, and never promise an arrival time.",
+        "edges": [
+          {
+            "to": "end",
+            "when": {
+              "else": true
+            }
+          }
+        ]
+      },
+      {
+        "id": "message",
+        "type": "action",
+        "name": "Take a message",
+        "action": "take_message",
+        "prompt": "Take a message for the team. As soon as you have their name, best callback number and what they need, call take_message right away and read the number back in the same reply. Don't ask them to confirm details you already have, and don't wait for another turn first. Never invent prices or quotes.",
+        "then": "message_taken"
+      },
+      {
+        "id": "message_taken",
+        "type": "conversation",
+        "name": "Wrap up the message",
+        "prompt": "The message is saved. Tell the caller the team will follow up during business hours and ask if there's anything else.",
+        "edges": [
+          {
+            "to": "end",
+            "when": {
+              "else": true
+            }
+          }
+        ]
+      },
+      {
+        "id": "decline",
+        "type": "end",
+        "name": "Decline politely",
+        "message": "Politely say the business isn't interested, without sharing any business details."
+      },
+      {
+        "id": "end",
+        "type": "end",
+        "name": "Goodbye"
+      }
+    ],
+    "global_edges": [
+      {
+        "to": "emergency",
+        "when": {
+          "intent": "describes an emergency that can't wait until business hours: an active leak or flooding, no heat in freezing weather, or a gas smell"
+        }
+      }
+    ]
+  },
+  "layout": {
+    "nodes": {
+      "greet": {
+        "x": 0,
+        "y": 0
+      },
+      "booking": {
+        "x": -320,
+        "y": 180
+      },
+      "schedule": {
+        "x": -320,
+        "y": 360
+      },
+      "booked": {
+        "x": -320,
+        "y": 540
+      },
+      "message": {
+        "x": 0,
+        "y": 360
+      },
+      "message_taken": {
+        "x": 0,
+        "y": 540
+      },
+      "decline": {
+        "x": 320,
+        "y": 180
+      },
+      "emergency": {
+        "x": 640,
+        "y": 180
+      },
+      "emergency_followup": {
+        "x": 640,
+        "y": 360
+      },
+      "end": {
+        "x": 0,
+        "y": 720
+      }
+    }
+  },
+  "fields": [
+    {
+      "key": "service_address",
+      "label": "Service address",
+      "type": "string",
+      "description": "Street address where the work is needed.",
+      "collect": "required",
+      "options": [],
+      "crm_field": null
+    },
+    {
+      "key": "equipment_type",
+      "label": "Equipment",
+      "type": "enum",
+      "options": ["furnace", "boiler", "water_heater", "ac", "plumbing_fixture", "pipes", "other"],
+      "description": "What needs service.",
+      "collect": "optional",
+      "crm_field": null
+    },
+    {
+      "key": "is_homeowner",
+      "label": "Homeowner",
+      "type": "boolean",
+      "description": "Whether the caller owns the home.",
+      "collect": "optional",
+      "options": [],
+      "crm_field": null
+    },
+    {
+      "key": "how_heard",
+      "label": "How they heard about us",
+      "type": "string",
+      "description": "Marketing source, if mentioned.",
+      "collect": "extract_only",
+      "options": [],
+      "crm_field": null
+    }
+  ],
+  "needs_setup": []
+}

@@ -1,0 +1,230 @@
+{
+  "format": "lassi.workflow",
+  "format_version": 1,
+  "name": "Emergency triage",
+  "description": "Separates emergencies from routine requests. Emergencies are marked urgent and put through to your on-call number; routine requests become messages, with a note for renters.",
+  "graph": {
+    "start": "triage",
+    "nodes": [
+      {
+        "id": "triage",
+        "type": "conversation",
+        "name": "What's happening?",
+        "prompt": "Find out what's wrong. Ask one short question at a time until you can tell whether it's an emergency or something that can wait until business hours.",
+        "edges": [
+          {
+            "to": "routine_details",
+            "when": {
+              "intent": "has a problem that can safely wait until business hours"
+            }
+          },
+          {
+            "to": "decline",
+            "when": {
+              "intent": "is a telemarketer, robocall or sales pitch"
+            }
+          }
+        ]
+      },
+      {
+        "id": "emergency",
+        "type": "action",
+        "name": "Flag the emergency",
+        "action": "flag_urgent",
+        "then": "emergency_address"
+      },
+      {
+        "id": "emergency_address",
+        "type": "collect",
+        "name": "Where is it?",
+        "prompt": "You've marked this urgent for the team. If the caller smells gas, first tell them to leave the home now and call 911 or the gas company, and keep the rest brief. Get the address so the technician knows where to go.",
+        "fields": ["service_address"],
+        "then": "transfer_oncall"
+      },
+      {
+        "id": "transfer_oncall",
+        "type": "transfer",
+        "name": "Connect the on-call tech",
+        "to": "{{variables.oncall_number}}",
+        "mode": "cold",
+        "message": "I'm connecting you to our on-call technician now.",
+        "fallback": "emergency_callback"
+      },
+      {
+        "id": "emergency_callback",
+        "type": "conversation",
+        "name": "Promise a fast callback",
+        "prompt": "You couldn't connect them directly, but you've marked this urgent for the team. Make sure you have the caller's name and best callback number (read it back), give one sensible safety tip such as shutting off the main water valve for a leak, and say someone will call back as soon as possible. Never promise an arrival time.",
+        "edges": [
+          {
+            "to": "end",
+            "when": {
+              "else": true
+            }
+          }
+        ]
+      },
+      {
+        "id": "routine_details",
+        "type": "collect",
+        "name": "Routine request details",
+        "prompt": "Get the details the team needs to follow up.",
+        "fields": ["service_address", "equipment_type", "is_homeowner"],
+        "optional_fields": ["is_homeowner"],
+        "then": "owner_check"
+      },
+      {
+        "id": "owner_check",
+        "type": "condition",
+        "name": "Homeowner?",
+        "edges": [
+          {
+            "to": "renter_message",
+            "when": {
+              "field": "is_homeowner",
+              "equals": false
+            },
+            "label": "Renter"
+          },
+          {
+            "to": "routine_message",
+            "when": {
+              "else": true
+            }
+          }
+        ]
+      },
+      {
+        "id": "renter_message",
+        "type": "action",
+        "name": "Message (renter)",
+        "action": "take_message",
+        "prompt": "The caller rents the home. Take a message for the team, and mention they should also let their landlord or property manager know. As soon as you have their name, best callback number and what they need, call take_message right away and read the number back in the same reply. Don't ask them to confirm details you already have, and don't wait for another turn first. Never invent prices.",
+        "then": "wrap_up"
+      },
+      {
+        "id": "routine_message",
+        "type": "action",
+        "name": "Message",
+        "action": "take_message",
+        "prompt": "Take a message for the team. As soon as you have their name, best callback number and what they need, call take_message right away and read the number back in the same reply. Don't ask them to confirm details you already have, and don't wait for another turn first. Never invent prices.",
+        "then": "wrap_up"
+      },
+      {
+        "id": "wrap_up",
+        "type": "conversation",
+        "name": "Wrap up",
+        "prompt": "The message is saved. Tell the caller the team will call back during business hours and ask if there's anything else.",
+        "edges": [
+          {
+            "to": "end",
+            "when": {
+              "else": true
+            }
+          }
+        ]
+      },
+      {
+        "id": "decline",
+        "type": "end",
+        "name": "Decline politely",
+        "message": "Politely say the business isn't interested, without sharing any business details."
+      },
+      {
+        "id": "end",
+        "type": "end",
+        "name": "Goodbye"
+      }
+    ],
+    "global_edges": [
+      {
+        "to": "emergency",
+        "when": {
+          "intent": "describes an emergency: an active leak or flooding, no heat in freezing weather, a gas smell, sparking or burning smells, or anything unsafe"
+        }
+      }
+    ]
+  },
+  "layout": {
+    "nodes": {
+      "triage": {
+        "x": 0,
+        "y": 0
+      },
+      "emergency": {
+        "x": -360,
+        "y": 180
+      },
+      "emergency_address": {
+        "x": -360,
+        "y": 360
+      },
+      "transfer_oncall": {
+        "x": -360,
+        "y": 540
+      },
+      "emergency_callback": {
+        "x": -360,
+        "y": 720
+      },
+      "routine_details": {
+        "x": 120,
+        "y": 180
+      },
+      "owner_check": {
+        "x": 120,
+        "y": 360
+      },
+      "renter_message": {
+        "x": 0,
+        "y": 540
+      },
+      "routine_message": {
+        "x": 240,
+        "y": 540
+      },
+      "wrap_up": {
+        "x": 120,
+        "y": 720
+      },
+      "decline": {
+        "x": 420,
+        "y": 180
+      },
+      "end": {
+        "x": 0,
+        "y": 900
+      }
+    }
+  },
+  "fields": [
+    {
+      "key": "service_address",
+      "label": "Service address",
+      "type": "string",
+      "description": "Street address where the work is needed.",
+      "collect": "required",
+      "options": [],
+      "crm_field": null
+    },
+    {
+      "key": "equipment_type",
+      "label": "Equipment",
+      "type": "enum",
+      "options": ["furnace", "boiler", "water_heater", "ac", "plumbing_fixture", "pipes", "other"],
+      "description": "What needs service.",
+      "collect": "optional",
+      "crm_field": null
+    },
+    {
+      "key": "is_homeowner",
+      "label": "Homeowner",
+      "type": "boolean",
+      "description": "Whether the caller owns the home.",
+      "collect": "optional",
+      "options": [],
+      "crm_field": null
+    }
+  ],
+  "needs_setup": []
+}

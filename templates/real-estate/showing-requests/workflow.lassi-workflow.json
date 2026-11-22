@@ -1,0 +1,306 @@
+{
+  "format": "lassi.workflow",
+  "format_version": 1,
+  "name": "Real estate showing requests",
+  "description": "Listing questions from the knowledge base, showings for buyers without an agent, and messages for buyers' agents and sellers.",
+  "graph": {
+    "start": "reason",
+    "nodes": [
+      {
+        "id": "reason",
+        "type": "conversation",
+        "name": "Find out why they're calling",
+        "prompt": "Find out whether the caller wants to see a listing, has a question about one, wants to sell, or is another agent. If they already said it, move on right away.",
+        "edges": [
+          {
+            "to": "showing_details",
+            "when": {
+              "intent": "wants to see a property"
+            },
+            "label": "Showing"
+          },
+          {
+            "to": "listing_questions",
+            "when": {
+              "intent": "has a question about a listing, like price, size, HOA fees or schools"
+            }
+          },
+          {
+            "to": "seller_details",
+            "when": {
+              "intent": "wants to sell a home or get a home valued"
+            },
+            "label": "Seller"
+          },
+          {
+            "to": "agent_message",
+            "when": {
+              "intent": "is a real estate agent calling for a client"
+            }
+          },
+          {
+            "to": "decline",
+            "when": {
+              "intent": "is a telemarketer, robocall or sales pitch"
+            }
+          },
+          {
+            "to": "message",
+            "when": {
+              "else": true
+            }
+          }
+        ]
+      },
+      {
+        "id": "listing_questions",
+        "type": "knowledge",
+        "name": "Listing questions",
+        "prompt": "Answer questions about the team's listings from the knowledge base: price, size, features, HOA fees, open houses and status. If a listing isn't in the knowledge base or its status may have changed, say an agent will confirm. Never comment on schools' quality, neighborhood safety or who lives in an area; offer the public sources instead.",
+        "edges": [
+          {
+            "to": "showing_details",
+            "when": {
+              "intent": "wants to see the property"
+            }
+          },
+          {
+            "to": "goodbye",
+            "when": {
+              "intent": "says they're all set"
+            }
+          },
+          {
+            "to": "reason",
+            "when": {
+              "else": true
+            }
+          }
+        ]
+      },
+      {
+        "id": "showing_details",
+        "type": "collect",
+        "name": "Showing details",
+        "prompt": "Get the details for the showing. Ask one thing at a time and read the address back.",
+        "fields": ["listing_address", "has_agent", "financing_status"],
+        "optional_fields": ["financing_status"],
+        "then": "agent_check"
+      },
+      {
+        "id": "agent_check",
+        "type": "condition",
+        "name": "Working with an agent?",
+        "edges": [
+          {
+            "to": "agent_message",
+            "when": {
+              "field": "has_agent",
+              "equals": true
+            },
+            "label": "Has an agent"
+          },
+          {
+            "to": "book_showing",
+            "when": {
+              "else": true
+            }
+          }
+        ]
+      },
+      {
+        "id": "book_showing",
+        "type": "action",
+        "name": "Book the showing",
+        "action": "book_appointment",
+        "prompt": "Book a showing at {{fields.listing_address}}. Offer two open times from availability, such as the soonest, or ones near a day the caller already mentioned. If neither works, ask what day or time of day suits them and offer the closest open times. As soon as the caller picks one, book it; don't ask them to confirm first.",
+        "then": "booked",
+        "on_error": "message"
+      },
+      {
+        "id": "booked",
+        "type": "conversation",
+        "name": "Confirm the showing",
+        "prompt": "The showing is booked. Confirm the address, day and time in one short sentence, and say the agent will meet them there and may text before the showing. Ask if there's anything else.",
+        "edges": [
+          {
+            "to": "goodbye",
+            "when": {
+              "else": true
+            }
+          }
+        ]
+      },
+      {
+        "id": "agent_message",
+        "type": "action",
+        "name": "Message for the listing agent",
+        "action": "take_message",
+        "prompt": "Showings for buyers who have an agent are set up agent to agent. Take a message for the listing agent with the address and the buyer's agent's name and brokerage. As soon as you have their name, best callback number and what they need, call take_message right away and read the number back in the same reply. Don't ask them to confirm details you already have, and don't wait for another turn first.",
+        "then": "message_taken"
+      },
+      {
+        "id": "seller_details",
+        "type": "collect",
+        "name": "Seller details",
+        "prompt": "Get the basics so an agent can prepare before calling back.",
+        "fields": ["property_address", "sell_timeline"],
+        "then": "seller_message"
+      },
+      {
+        "id": "seller_message",
+        "type": "action",
+        "name": "Message for a listing agent",
+        "action": "take_message",
+        "prompt": "Take a message for a listing agent about selling {{fields.property_address}}. As soon as you have their name, best callback number and what they need, call take_message right away and read the number back in the same reply. Don't ask them to confirm details you already have, and don't wait for another turn first. Never estimate what the home is worth.",
+        "then": "message_taken"
+      },
+      {
+        "id": "message",
+        "type": "action",
+        "name": "Take a message",
+        "action": "take_message",
+        "prompt": "Take a message for the team. As soon as you have their name, best callback number and what they need, call take_message right away and read the number back in the same reply. Don't ask them to confirm details you already have, and don't wait for another turn first.",
+        "then": "message_taken"
+      },
+      {
+        "id": "message_taken",
+        "type": "conversation",
+        "name": "Wrap up the message",
+        "prompt": "The message is saved. Tell the caller an agent will call back and ask if there's anything else.",
+        "edges": [
+          {
+            "to": "goodbye",
+            "when": {
+              "else": true
+            }
+          }
+        ]
+      },
+      {
+        "id": "decline",
+        "type": "end",
+        "name": "Decline politely",
+        "message": "Politely say the business isn't interested, without sharing any business details."
+      },
+      {
+        "id": "goodbye",
+        "type": "end",
+        "name": "Goodbye"
+      }
+    ]
+  },
+  "layout": {
+    "nodes": {
+      "reason": {
+        "x": 0,
+        "y": 0
+      },
+      "listing_questions": {
+        "x": -750,
+        "y": 180
+      },
+      "showing_details": {
+        "x": -450,
+        "y": 180
+      },
+      "agent_check": {
+        "x": -450,
+        "y": 360
+      },
+      "book_showing": {
+        "x": 0,
+        "y": 540
+      },
+      "booked": {
+        "x": 0,
+        "y": 720
+      },
+      "agent_message": {
+        "x": -150,
+        "y": 180
+      },
+      "seller_details": {
+        "x": 150,
+        "y": 180
+      },
+      "seller_message": {
+        "x": -150,
+        "y": 360
+      },
+      "message": {
+        "x": 450,
+        "y": 180
+      },
+      "message_taken": {
+        "x": 150,
+        "y": 360
+      },
+      "decline": {
+        "x": 750,
+        "y": 180
+      },
+      "goodbye": {
+        "x": 450,
+        "y": 360
+      }
+    }
+  },
+  "fields": [
+    {
+      "key": "listing_address",
+      "label": "Listing address",
+      "type": "string",
+      "description": "Address or MLS number of the listing they want to see.",
+      "collect": "required",
+      "options": [],
+      "crm_field": null
+    },
+    {
+      "key": "has_agent",
+      "label": "Has a buyer's agent",
+      "type": "boolean",
+      "description": "Whether the caller is already working with a real estate agent.",
+      "collect": "required",
+      "options": [],
+      "crm_field": null
+    },
+    {
+      "key": "financing_status",
+      "label": "Financing",
+      "type": "enum",
+      "description": "Where they are with financing, if they want to say.",
+      "collect": "optional",
+      "options": ["pre_approved", "cash", "not_yet"],
+      "crm_field": null
+    },
+    {
+      "key": "property_address",
+      "label": "Property address",
+      "type": "string",
+      "description": "Address of the home they want to sell.",
+      "collect": "required",
+      "options": [],
+      "crm_field": null
+    },
+    {
+      "key": "sell_timeline",
+      "label": "Timeline",
+      "type": "enum",
+      "description": "When they hope to sell.",
+      "collect": "required",
+      "options": ["now", "within_3_months", "within_a_year", "just_curious"],
+      "crm_field": null
+    },
+    {
+      "key": "how_heard",
+      "label": "How they heard about us",
+      "type": "string",
+      "description": "Sign, website, referral or other source, if mentioned.",
+      "collect": "extract_only",
+      "options": [],
+      "crm_field": null
+    }
+  ],
+  "needs_setup": []
+}

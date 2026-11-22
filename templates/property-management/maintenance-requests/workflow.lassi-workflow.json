@@ -1,0 +1,312 @@
+{
+  "format": "lassi.workflow",
+  "format_version": 1,
+  "name": "Property maintenance requests",
+  "description": "Routine work orders with permission to enter, emergencies put through to on-call maintenance, and rental questions.",
+  "graph": {
+    "start": "reason",
+    "nodes": [
+      {
+        "id": "reason",
+        "type": "conversation",
+        "name": "Find out why they're calling",
+        "prompt": "Find out whether the caller is a current tenant with a maintenance problem, someone asking about renting, or calling about something else. If they already said it, move on right away.",
+        "edges": [
+          {
+            "to": "request_details",
+            "when": {
+              "intent": "is a tenant with a maintenance problem that can wait for a work order"
+            },
+            "label": "Routine repair"
+          },
+          {
+            "to": "rentals",
+            "when": {
+              "intent": "is asking about available units, showings, pricing or how to apply"
+            }
+          },
+          {
+            "to": "office_message",
+            "when": {
+              "intent": "is calling about rent, a lease, a payment, a notice or a complaint"
+            }
+          },
+          {
+            "to": "decline",
+            "when": {
+              "intent": "is a telemarketer, robocall or sales pitch"
+            }
+          },
+          {
+            "to": "office_message",
+            "when": {
+              "else": true
+            }
+          }
+        ]
+      },
+      {
+        "id": "request_details",
+        "type": "collect",
+        "name": "Maintenance request details",
+        "prompt": "Get the details for the work order. Ask one short question at a time. Read the address and unit back.",
+        "fields": [
+          "property_address",
+          "unit_number",
+          "issue_category",
+          "issue_description",
+          "permission_to_enter",
+          "pets_in_unit"
+        ],
+        "optional_fields": ["pets_in_unit"],
+        "then": "work_order"
+      },
+      {
+        "id": "work_order",
+        "type": "action",
+        "name": "Take the work order",
+        "action": "take_message",
+        "prompt": "Take the maintenance request as a message for the maintenance team, with the address, unit, what's wrong, whether they can enter without the tenant home, and any pets. As soon as you have their name, best callback number and what they need, call take_message right away and read the number back in the same reply. Don't ask them to confirm details you already have, and don't wait for another turn first. Never promise when someone will come out.",
+        "then": "work_order_taken"
+      },
+      {
+        "id": "work_order_taken",
+        "type": "conversation",
+        "name": "Wrap up the request",
+        "prompt": "The request is saved. Tell the caller the maintenance team will contact them to schedule, and that if it gets worse or turns into an emergency they should call back right away. Ask if there's anything else.",
+        "edges": [
+          {
+            "to": "goodbye",
+            "when": {
+              "else": true
+            }
+          }
+        ]
+      },
+      {
+        "id": "rentals",
+        "type": "knowledge",
+        "name": "Rental questions",
+        "prompt": "Answer questions about available units, rent, pet policy, application steps and fees, from the knowledge base. Never say a unit is available unless the knowledge base says so, and never promise approval.",
+        "edges": [
+          {
+            "to": "leasing_message",
+            "when": {
+              "intent": "wants to see a unit or talk to the leasing team"
+            }
+          },
+          {
+            "to": "goodbye",
+            "when": {
+              "intent": "says they're all set"
+            }
+          },
+          {
+            "to": "reason",
+            "when": {
+              "else": true
+            }
+          }
+        ]
+      },
+      {
+        "id": "leasing_message",
+        "type": "action",
+        "name": "Message for leasing",
+        "action": "take_message",
+        "prompt": "Take a message for the leasing team with the property or unit they're interested in and when they'd like to see it. As soon as you have their name, best callback number and what they need, call take_message right away and read the number back in the same reply. Don't ask them to confirm details you already have, and don't wait for another turn first.",
+        "then": "message_taken"
+      },
+      {
+        "id": "emergency",
+        "type": "action",
+        "name": "Flag the emergency",
+        "action": "flag_urgent",
+        "then": "emergency_unit"
+      },
+      {
+        "id": "emergency_unit",
+        "type": "collect",
+        "name": "Where is it?",
+        "prompt": "You've marked this urgent for maintenance. If the caller smells gas or sees smoke or fire, first tell them to leave now and call 911 or the gas company, and keep the rest brief. For a water leak, suggest shutting off the water valve under the sink or toilet if they can. Get the address and unit so maintenance knows where to go.",
+        "fields": ["property_address", "unit_number"],
+        "then": "transfer_maintenance"
+      },
+      {
+        "id": "transfer_maintenance",
+        "type": "transfer",
+        "name": "Connect on-call maintenance",
+        "to": "{{variables.maintenance_oncall_number}}",
+        "mode": "warm",
+        "message": "I'm getting our on-call maintenance tech for you now. Please stay on the line.",
+        "fallback": "emergency_callback"
+      },
+      {
+        "id": "emergency_callback",
+        "type": "action",
+        "name": "Urgent work order",
+        "action": "take_message",
+        "prompt": "Nobody could take the call. Take an urgent work order for maintenance with what's happening. As soon as you have their name, best callback number and what they need, call take_message right away and read the number back in the same reply. Don't ask them to confirm details you already have, and don't wait for another turn first. Say someone will call back as soon as possible, and never promise an arrival time.",
+        "then": "message_taken"
+      },
+      {
+        "id": "office_message",
+        "type": "action",
+        "name": "Message for the office",
+        "action": "take_message",
+        "prompt": "Take a message for the property office, with the property and unit if they're a tenant. As soon as you have their name, best callback number and what they need, call take_message right away and read the number back in the same reply. Don't ask them to confirm details you already have, and don't wait for another turn first. Never discuss balances, deposits or lease terms.",
+        "then": "message_taken"
+      },
+      {
+        "id": "message_taken",
+        "type": "conversation",
+        "name": "Wrap up the message",
+        "prompt": "The message is saved. Tell the caller the team will follow up during business hours and ask if there's anything else.",
+        "edges": [
+          {
+            "to": "goodbye",
+            "when": {
+              "else": true
+            }
+          }
+        ]
+      },
+      {
+        "id": "decline",
+        "type": "end",
+        "name": "Decline politely",
+        "message": "Politely say the business isn't interested, without sharing any business details."
+      },
+      {
+        "id": "goodbye",
+        "type": "end",
+        "name": "Goodbye"
+      }
+    ],
+    "global_edges": [
+      {
+        "to": "emergency",
+        "when": {
+          "intent": "describes a maintenance emergency: flooding or a burst pipe, no heat in freezing weather, a gas smell, sparking or smoke, sewage backing up, or a door or window that won't lock"
+        }
+      }
+    ]
+  },
+  "layout": {
+    "nodes": {
+      "reason": {
+        "x": 0,
+        "y": 0
+      },
+      "request_details": {
+        "x": -450,
+        "y": 180
+      },
+      "work_order": {
+        "x": -450,
+        "y": 360
+      },
+      "work_order_taken": {
+        "x": 0,
+        "y": 540
+      },
+      "rentals": {
+        "x": -150,
+        "y": 180
+      },
+      "leasing_message": {
+        "x": -150,
+        "y": 360
+      },
+      "emergency": {
+        "x": 810,
+        "y": 180
+      },
+      "emergency_unit": {
+        "x": 810,
+        "y": 360
+      },
+      "transfer_maintenance": {
+        "x": 810,
+        "y": 540
+      },
+      "emergency_callback": {
+        "x": 810,
+        "y": 720
+      },
+      "office_message": {
+        "x": 150,
+        "y": 180
+      },
+      "message_taken": {
+        "x": 150,
+        "y": 360
+      },
+      "decline": {
+        "x": 450,
+        "y": 180
+      },
+      "goodbye": {
+        "x": 450,
+        "y": 360
+      }
+    }
+  },
+  "fields": [
+    {
+      "key": "property_address",
+      "label": "Property address",
+      "type": "string",
+      "description": "Street address of the building.",
+      "collect": "required",
+      "options": [],
+      "crm_field": null
+    },
+    {
+      "key": "unit_number",
+      "label": "Unit",
+      "type": "string",
+      "description": "Unit or apartment number. \"None\" for a single-family home.",
+      "collect": "required",
+      "options": [],
+      "crm_field": null
+    },
+    {
+      "key": "issue_category",
+      "label": "Issue type",
+      "type": "enum",
+      "description": "What kind of problem it is.",
+      "collect": "required",
+      "options": ["plumbing", "electrical", "appliance", "heating_cooling", "doors_locks", "pests", "other"],
+      "crm_field": null
+    },
+    {
+      "key": "issue_description",
+      "label": "What's wrong",
+      "type": "string",
+      "description": "The problem in the caller's words.",
+      "collect": "required",
+      "options": [],
+      "crm_field": null
+    },
+    {
+      "key": "permission_to_enter",
+      "label": "Permission to enter",
+      "type": "boolean",
+      "description": "Whether maintenance may enter if the tenant isn't home.",
+      "collect": "required",
+      "options": [],
+      "crm_field": null
+    },
+    {
+      "key": "pets_in_unit",
+      "label": "Pets in unit",
+      "type": "boolean",
+      "description": "Whether there are pets in the unit that maintenance should know about.",
+      "collect": "optional",
+      "options": [],
+      "crm_field": null
+    }
+  ],
+  "needs_setup": []
+}

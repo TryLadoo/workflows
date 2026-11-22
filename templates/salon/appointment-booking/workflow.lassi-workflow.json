@@ -1,0 +1,276 @@
+{
+  "format": "lassi.workflow",
+  "format_version": 1,
+  "name": "Salon appointment booking",
+  "description": "Bookings with a preferred stylist, service and price questions, and messages for changes and late arrivals.",
+  "graph": {
+    "start": "reason",
+    "nodes": [
+      {
+        "id": "reason",
+        "type": "conversation",
+        "name": "Find out why they're calling",
+        "prompt": "Find out what the caller needs. If they already said it, move on right away instead of asking again.",
+        "edges": [
+          {
+            "to": "service_details",
+            "when": {
+              "intent": "wants to book an appointment"
+            }
+          },
+          {
+            "to": "questions",
+            "when": {
+              "intent": "has a question about services, prices, products or how long something takes"
+            }
+          },
+          {
+            "to": "running_late",
+            "when": {
+              "intent": "is running late for or can't make an appointment today"
+            }
+          },
+          {
+            "to": "change_message",
+            "when": {
+              "intent": "wants to reschedule or cancel a future appointment"
+            }
+          },
+          {
+            "to": "decline",
+            "when": {
+              "intent": "is a telemarketer, robocall or sales pitch"
+            }
+          },
+          {
+            "to": "message",
+            "when": {
+              "else": true
+            }
+          }
+        ]
+      },
+      {
+        "id": "questions",
+        "type": "knowledge",
+        "name": "Service questions",
+        "prompt": "Answer questions about services, starting prices, how long each takes and the products the salon uses, from the knowledge base. Say color and extension prices depend on hair length and are confirmed at the appointment.",
+        "edges": [
+          {
+            "to": "service_details",
+            "when": {
+              "intent": "wants to book"
+            }
+          },
+          {
+            "to": "goodbye",
+            "when": {
+              "intent": "says they're all set"
+            }
+          },
+          {
+            "to": "reason",
+            "when": {
+              "else": true
+            }
+          }
+        ]
+      },
+      {
+        "id": "service_details",
+        "type": "collect",
+        "name": "What they're booking",
+        "prompt": "Get the service and whether they have a stylist in mind.",
+        "fields": ["service", "stylist_preference", "new_client"],
+        "optional_fields": ["stylist_preference", "new_client"],
+        "then": "color_check"
+      },
+      {
+        "id": "color_check",
+        "type": "condition",
+        "name": "Color service?",
+        "edges": [
+          {
+            "to": "color_note",
+            "when": {
+              "field": "service",
+              "in": ["color", "highlights"]
+            },
+            "label": "Color"
+          },
+          {
+            "to": "book",
+            "when": {
+              "else": true
+            }
+          }
+        ]
+      },
+      {
+        "id": "color_note",
+        "type": "conversation",
+        "name": "Patch test note",
+        "prompt": "If the caller is new to the salon or hasn't had color here before, explain in one sentence that the salon does a quick patch test at least 48 hours before a first color service, and book that appointment far enough out. Otherwise move on.",
+        "then": "book"
+      },
+      {
+        "id": "book",
+        "type": "action",
+        "name": "Book the appointment",
+        "action": "book_appointment",
+        "prompt": "Book {{fields.service}}. If they asked for a stylist, offer that stylist's times first and say so if none work. Offer two open times from availability, such as the soonest, or ones near a day the caller already mentioned. If neither works, ask what day or time of day suits them and offer the closest open times. As soon as the caller picks one, book it; don't ask them to confirm first.",
+        "then": "booked",
+        "on_error": "message"
+      },
+      {
+        "id": "booked",
+        "type": "conversation",
+        "name": "Confirm the appointment",
+        "prompt": "The appointment is booked. Confirm the service, day and time in one short sentence and ask if there's anything else.",
+        "edges": [
+          {
+            "to": "goodbye",
+            "when": {
+              "else": true
+            }
+          }
+        ]
+      },
+      {
+        "id": "running_late",
+        "type": "action",
+        "name": "Late or missed today",
+        "action": "take_message",
+        "prompt": "Take a message for the front desk with their appointment time and how late they'll be, or that they can't make it. As soon as you have their name, best callback number and what they need, call take_message right away and read the number back in the same reply. Don't ask them to confirm details you already have, and don't wait for another turn first. Don't promise the appointment can still go ahead; the salon will confirm.",
+        "then": "message_taken"
+      },
+      {
+        "id": "change_message",
+        "type": "action",
+        "name": "Message about a change",
+        "action": "take_message",
+        "prompt": "The front desk handles changes to existing appointments. Take a message with the appointment they want to change or cancel. As soon as you have their name, best callback number and what they need, call take_message right away and read the number back in the same reply. Don't ask them to confirm details you already have, and don't wait for another turn first.",
+        "then": "message_taken"
+      },
+      {
+        "id": "message",
+        "type": "action",
+        "name": "Take a message",
+        "action": "take_message",
+        "prompt": "Take a message for the salon. As soon as you have their name, best callback number and what they need, call take_message right away and read the number back in the same reply. Don't ask them to confirm details you already have, and don't wait for another turn first.",
+        "then": "message_taken"
+      },
+      {
+        "id": "message_taken",
+        "type": "conversation",
+        "name": "Wrap up the message",
+        "prompt": "The message is saved. Tell the caller the salon will get back to them and ask if there's anything else.",
+        "edges": [
+          {
+            "to": "goodbye",
+            "when": {
+              "else": true
+            }
+          }
+        ]
+      },
+      {
+        "id": "decline",
+        "type": "end",
+        "name": "Decline politely",
+        "message": "Politely say the business isn't interested, without sharing any business details."
+      },
+      {
+        "id": "goodbye",
+        "type": "end",
+        "name": "Goodbye"
+      }
+    ]
+  },
+  "layout": {
+    "nodes": {
+      "reason": {
+        "x": 0,
+        "y": 0
+      },
+      "questions": {
+        "x": -750,
+        "y": 180
+      },
+      "service_details": {
+        "x": -450,
+        "y": 180
+      },
+      "color_check": {
+        "x": -300,
+        "y": 360
+      },
+      "color_note": {
+        "x": -150,
+        "y": 540
+      },
+      "book": {
+        "x": 150,
+        "y": 540
+      },
+      "booked": {
+        "x": 0,
+        "y": 720
+      },
+      "running_late": {
+        "x": -150,
+        "y": 180
+      },
+      "change_message": {
+        "x": 150,
+        "y": 180
+      },
+      "message": {
+        "x": 450,
+        "y": 180
+      },
+      "message_taken": {
+        "x": 0,
+        "y": 360
+      },
+      "decline": {
+        "x": 750,
+        "y": 180
+      },
+      "goodbye": {
+        "x": 300,
+        "y": 360
+      }
+    }
+  },
+  "fields": [
+    {
+      "key": "service",
+      "label": "Service",
+      "type": "enum",
+      "description": "The service they want.",
+      "collect": "required",
+      "options": ["haircut", "color", "highlights", "blowout", "extensions", "treatment", "nails", "other"],
+      "crm_field": null
+    },
+    {
+      "key": "stylist_preference",
+      "label": "Preferred stylist",
+      "type": "string",
+      "description": "A stylist they asked for by name, if any.",
+      "collect": "optional",
+      "options": [],
+      "crm_field": null
+    },
+    {
+      "key": "new_client",
+      "label": "New client",
+      "type": "boolean",
+      "description": "Whether they've been to the salon before.",
+      "collect": "optional",
+      "options": [],
+      "crm_field": null
+    }
+  ],
+  "needs_setup": []
+}

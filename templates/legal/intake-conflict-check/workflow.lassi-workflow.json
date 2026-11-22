@@ -1,0 +1,325 @@
+{
+  "format": "lassi.workflow",
+  "format_version": 1,
+  "name": "Law firm intake with conflict check",
+  "description": "New-matter intake by practice area, the other party's name for a conflict check, and urgent deadlines put through to intake.",
+  "graph": {
+    "start": "reason",
+    "nodes": [
+      {
+        "id": "reason",
+        "type": "conversation",
+        "name": "Find out why they're calling",
+        "prompt": "Find out whether the caller is a current client or has a new legal matter. Don't ask for details of the matter yet. Never give legal advice or say whether they have a case.",
+        "edges": [
+          {
+            "to": "new_matter",
+            "when": {
+              "intent": "has a new legal matter or wants a consultation"
+            },
+            "label": "New matter"
+          },
+          {
+            "to": "client_message",
+            "when": {
+              "intent": "is a current client calling about their case"
+            },
+            "label": "Current client"
+          },
+          {
+            "to": "questions",
+            "when": {
+              "intent": "has a question about the firm, its practice areas, fees or office location"
+            }
+          },
+          {
+            "to": "decline",
+            "when": {
+              "intent": "is a telemarketer, robocall or sales pitch"
+            }
+          },
+          {
+            "to": "message",
+            "when": {
+              "else": true
+            }
+          }
+        ]
+      },
+      {
+        "id": "questions",
+        "type": "knowledge",
+        "name": "Questions about the firm",
+        "prompt": "Answer questions about the firm's practice areas, consultation fees, office hours and location, from the knowledge base. Never give legal advice or comment on the caller's situation.",
+        "edges": [
+          {
+            "to": "new_matter",
+            "when": {
+              "intent": "wants a consultation"
+            }
+          },
+          {
+            "to": "goodbye",
+            "when": {
+              "intent": "says they're all set"
+            }
+          },
+          {
+            "to": "reason",
+            "when": {
+              "else": true
+            }
+          }
+        ]
+      },
+      {
+        "id": "new_matter",
+        "type": "collect",
+        "name": "Intake details",
+        "prompt": "Before anyone can discuss the matter, the firm runs a conflict check. Explain that in one sentence, then get the details. Ask for a brief summary only, a sentence or two, and tell the caller not to share anything they'd want kept confidential until the firm confirms it can help.",
+        "fields": ["client_name", "practice_area", "opposing_party", "matter_summary", "upcoming_deadline"],
+        "optional_fields": ["upcoming_deadline"],
+        "then": "practice_check"
+      },
+      {
+        "id": "practice_check",
+        "type": "condition",
+        "name": "A practice area we handle?",
+        "edges": [
+          {
+            "to": "intake_message",
+            "when": {
+              "field": "practice_area",
+              "in": ["personal_injury", "family", "estate_planning", "employment"]
+            },
+            "label": "We handle it"
+          },
+          {
+            "to": "not_handled",
+            "when": {
+              "else": true
+            }
+          }
+        ]
+      },
+      {
+        "id": "intake_message",
+        "type": "action",
+        "name": "Intake message for conflict check",
+        "action": "take_message",
+        "prompt": "Take an intake message for the firm. Include the practice area, the other party's name ({{fields.opposing_party}}) for the conflict check, and the brief summary. As soon as you have their name, best callback number and what they need, call take_message right away and read the number back in the same reply. Don't ask them to confirm details you already have, and don't wait for another turn first. Tell the caller an intake coordinator will run the conflict check and call back to schedule a consultation. Make clear that the firm doesn't represent them until they've signed an engagement agreement.",
+        "then": "message_taken"
+      },
+      {
+        "id": "not_handled",
+        "type": "conversation",
+        "name": "Matter we don't handle",
+        "prompt": "Say kindly that the firm doesn't handle this kind of matter. Suggest the state bar's lawyer referral service, without naming a specific lawyer. Offer to take a message if they'd still like someone to call back, and otherwise wish them well.",
+        "edges": [
+          {
+            "to": "message",
+            "when": {
+              "intent": "wants someone to call back anyway"
+            }
+          },
+          {
+            "to": "goodbye",
+            "when": {
+              "else": true
+            }
+          }
+        ]
+      },
+      {
+        "id": "client_message",
+        "type": "action",
+        "name": "Message for the client's team",
+        "action": "take_message",
+        "prompt": "Take a message for the client's attorney: their name, which matter it's about, and what they need. As soon as you have their name, best callback number and what they need, call take_message right away and read the number back in the same reply. Don't ask them to confirm details you already have, and don't wait for another turn first. Never discuss the case or its status.",
+        "then": "message_taken"
+      },
+      {
+        "id": "urgent",
+        "type": "action",
+        "name": "Flag the deadline",
+        "action": "flag_urgent",
+        "then": "transfer_intake"
+      },
+      {
+        "id": "transfer_intake",
+        "type": "transfer",
+        "name": "Put them through to intake",
+        "to": "{{variables.intake_number}}",
+        "mode": "warm",
+        "message": "That sounds time-sensitive. I'm getting someone from the firm for you now.",
+        "fallback": "urgent_message"
+      },
+      {
+        "id": "urgent_message",
+        "type": "action",
+        "name": "Urgent message",
+        "action": "take_message",
+        "prompt": "Nobody could take the call. Take an urgent message with the deadline or court date, the other party's name for the conflict check, and what happened. As soon as you have their name, best callback number and what they need, call take_message right away and read the number back in the same reply. Don't ask them to confirm details you already have, and don't wait for another turn first. Say someone will call back as soon as possible, and never give legal advice.",
+        "then": "message_taken"
+      },
+      {
+        "id": "message",
+        "type": "action",
+        "name": "Take a message",
+        "action": "take_message",
+        "prompt": "Take a message for the firm. As soon as you have their name, best callback number and what they need, call take_message right away and read the number back in the same reply. Don't ask them to confirm details you already have, and don't wait for another turn first.",
+        "then": "message_taken"
+      },
+      {
+        "id": "message_taken",
+        "type": "conversation",
+        "name": "Wrap up the message",
+        "prompt": "The message is saved. Tell the caller the firm will call back during business hours and ask if there's anything else.",
+        "edges": [
+          {
+            "to": "goodbye",
+            "when": {
+              "else": true
+            }
+          }
+        ]
+      },
+      {
+        "id": "decline",
+        "type": "end",
+        "name": "Decline politely",
+        "message": "Politely say the business isn't interested, without sharing any business details."
+      },
+      {
+        "id": "goodbye",
+        "type": "end",
+        "name": "Goodbye"
+      }
+    ],
+    "global_edges": [
+      {
+        "to": "urgent",
+        "when": {
+          "intent": "mentions a court date, filing deadline or hearing in the next few days, an arrest, or being served with papers"
+        }
+      }
+    ]
+  },
+  "layout": {
+    "nodes": {
+      "reason": {
+        "x": 0,
+        "y": 0
+      },
+      "questions": {
+        "x": -600,
+        "y": 180
+      },
+      "new_matter": {
+        "x": -300,
+        "y": 180
+      },
+      "practice_check": {
+        "x": -300,
+        "y": 360
+      },
+      "intake_message": {
+        "x": -150,
+        "y": 540
+      },
+      "not_handled": {
+        "x": 150,
+        "y": 540
+      },
+      "client_message": {
+        "x": 0,
+        "y": 180
+      },
+      "urgent": {
+        "x": 960,
+        "y": 180
+      },
+      "transfer_intake": {
+        "x": 960,
+        "y": 360
+      },
+      "urgent_message": {
+        "x": 960,
+        "y": 540
+      },
+      "message": {
+        "x": 300,
+        "y": 180
+      },
+      "message_taken": {
+        "x": 0,
+        "y": 360
+      },
+      "decline": {
+        "x": 600,
+        "y": 180
+      },
+      "goodbye": {
+        "x": 300,
+        "y": 360
+      }
+    }
+  },
+  "fields": [
+    {
+      "key": "client_name",
+      "label": "Client name",
+      "type": "string",
+      "description": "Full name of the person who needs help, which may not be the caller.",
+      "collect": "required",
+      "options": [],
+      "crm_field": null
+    },
+    {
+      "key": "practice_area",
+      "label": "Practice area",
+      "type": "enum",
+      "description": "The kind of legal matter.",
+      "collect": "required",
+      "options": ["personal_injury", "family", "estate_planning", "employment", "criminal", "real_estate", "other"],
+      "crm_field": null
+    },
+    {
+      "key": "opposing_party",
+      "label": "Other party",
+      "type": "string",
+      "description": "Full name of the other person or company involved, for the conflict check. \"None\" if there isn't one.",
+      "collect": "required",
+      "options": [],
+      "crm_field": null
+    },
+    {
+      "key": "matter_summary",
+      "label": "Summary",
+      "type": "string",
+      "description": "A sentence or two about what happened. No confidential details.",
+      "collect": "required",
+      "options": [],
+      "crm_field": null
+    },
+    {
+      "key": "upcoming_deadline",
+      "label": "Upcoming deadline",
+      "type": "date",
+      "description": "A court date or filing deadline, if there is one.",
+      "collect": "optional",
+      "options": [],
+      "crm_field": null
+    },
+    {
+      "key": "how_heard",
+      "label": "How they heard about us",
+      "type": "string",
+      "description": "Referral or marketing source, if mentioned.",
+      "collect": "extract_only",
+      "options": [],
+      "crm_field": null
+    }
+  ],
+  "needs_setup": []
+}

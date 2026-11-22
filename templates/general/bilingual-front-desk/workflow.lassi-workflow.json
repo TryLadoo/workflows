@@ -1,0 +1,237 @@
+{
+  "format": "lassi.workflow",
+  "format_version": 1,
+  "name": "Bilingual front desk (English and Spanish)",
+  "description": "A front desk for English and Spanish callers: questions, bookings, messages, and a person during booking hours.",
+  "graph": {
+    "start": "reason",
+    "nodes": [
+      {
+        "id": "reason",
+        "type": "conversation",
+        "name": "Find out why they're calling",
+        "prompt": "Find out what the caller needs. Answer in the language the caller is using, and keep using it for names, times and numbers you read back. If they already said what they need, move on right away.",
+        "edges": [
+          {
+            "to": "visit_details",
+            "when": {
+              "intent": "wants to book an appointment or a visit"
+            }
+          },
+          {
+            "to": "questions",
+            "when": {
+              "intent": "has a question about services, prices, hours or location"
+            }
+          },
+          {
+            "to": "person_check",
+            "when": {
+              "intent": "asks for a person, the owner or a specific staff member"
+            }
+          },
+          {
+            "to": "decline",
+            "when": {
+              "intent": "is a telemarketer, robocall or sales pitch"
+            }
+          },
+          {
+            "to": "message",
+            "when": {
+              "else": true
+            }
+          }
+        ]
+      },
+      {
+        "id": "questions",
+        "type": "knowledge",
+        "name": "Questions",
+        "prompt": "Answer from the knowledge base, in the caller's language. Never guess a price or policy that isn't there; offer to take a message instead.",
+        "edges": [
+          {
+            "to": "visit_details",
+            "when": {
+              "intent": "wants to book"
+            }
+          },
+          {
+            "to": "goodbye",
+            "when": {
+              "intent": "says they're all set"
+            }
+          },
+          {
+            "to": "reason",
+            "when": {
+              "else": true
+            }
+          }
+        ]
+      },
+      {
+        "id": "visit_details",
+        "type": "collect",
+        "name": "Visit details",
+        "prompt": "Get what the visit is for. Spell back names in the caller's language if they spelled them out.",
+        "fields": ["visit_reason"],
+        "then": "book"
+      },
+      {
+        "id": "book",
+        "type": "action",
+        "name": "Book the visit",
+        "action": "book_appointment",
+        "prompt": "Offer two open times from availability, such as the soonest, or ones near a day the caller already mentioned. If neither works, ask what day or time of day suits them and offer the closest open times. As soon as the caller picks one, book it; don't ask them to confirm first. Say the day and time in the caller's language.",
+        "then": "booked",
+        "on_error": "message"
+      },
+      {
+        "id": "booked",
+        "type": "conversation",
+        "name": "Confirm the visit",
+        "prompt": "The visit is booked. Confirm the day and time in one short sentence, in the caller's language, and ask if there's anything else.",
+        "edges": [
+          {
+            "to": "goodbye",
+            "when": {
+              "else": true
+            }
+          }
+        ]
+      },
+      {
+        "id": "person_check",
+        "type": "condition",
+        "name": "During booking hours?",
+        "edges": [
+          {
+            "to": "transfer_office",
+            "when": {
+              "booking_hours": true
+            },
+            "label": "Open"
+          },
+          {
+            "to": "message",
+            "when": {
+              "else": true
+            }
+          }
+        ]
+      },
+      {
+        "id": "transfer_office",
+        "type": "transfer",
+        "name": "Put them through to the office",
+        "to": "{{variables.office_number}}",
+        "mode": "warm",
+        "message": "I'm putting you through to the office now. Please stay on the line.",
+        "fallback": "message"
+      },
+      {
+        "id": "message",
+        "type": "action",
+        "name": "Take a message",
+        "action": "take_message",
+        "prompt": "Take a message for the team, and note which language the caller prefers for the callback. As soon as you have their name, best callback number and what they need, call take_message right away and read the number back in the same reply. Don't ask them to confirm details you already have, and don't wait for another turn first.",
+        "then": "message_taken"
+      },
+      {
+        "id": "message_taken",
+        "type": "conversation",
+        "name": "Wrap up the message",
+        "prompt": "The message is saved. Tell the caller, in their language, that the team will call back during business hours, and ask if there's anything else.",
+        "edges": [
+          {
+            "to": "goodbye",
+            "when": {
+              "else": true
+            }
+          }
+        ]
+      },
+      {
+        "id": "decline",
+        "type": "end",
+        "name": "Decline politely",
+        "message": "Politely say the business isn't interested, without sharing any business details."
+      },
+      {
+        "id": "goodbye",
+        "type": "end",
+        "name": "Goodbye"
+      }
+    ]
+  },
+  "layout": {
+    "nodes": {
+      "reason": {
+        "x": 0,
+        "y": 0
+      },
+      "questions": {
+        "x": -600,
+        "y": 180
+      },
+      "visit_details": {
+        "x": -300,
+        "y": 180
+      },
+      "book": {
+        "x": -450,
+        "y": 360
+      },
+      "booked": {
+        "x": 0,
+        "y": 540
+      },
+      "person_check": {
+        "x": 0,
+        "y": 180
+      },
+      "transfer_office": {
+        "x": -150,
+        "y": 360
+      },
+      "message": {
+        "x": 300,
+        "y": 180
+      },
+      "message_taken": {
+        "x": 150,
+        "y": 360
+      },
+      "decline": {
+        "x": 600,
+        "y": 180
+      },
+      "goodbye": {
+        "x": 450,
+        "y": 360
+      }
+    }
+  },
+  "fields": [
+    {
+      "key": "visit_reason",
+      "label": "Reason for visit",
+      "type": "string",
+      "description": "What the visit is for, in the caller's words.",
+      "collect": "required",
+      "options": [],
+      "crm_field": null
+    },
+    {
+      "key": "how_heard",
+      "label": "How they heard about us",
+      "type": "string",
+      "description": "Referral or marketing source, if mentioned.",
+      "collect": "extract_only",
+      "options": [],
+      "crm_field": null
+    }
+  ],
+  "needs_setup": []
+}

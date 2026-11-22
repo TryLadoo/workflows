@@ -1,0 +1,87 @@
+{
+  "format": "lassi.workflow",
+  "format_version": 1,
+  "name": "Rivera Plumbing front desk",
+  "description": "Books visits and takes messages. Emergencies are flagged urgent.",
+  "graph": {
+    "start": "greet",
+    "nodes": [
+      {
+        "id": "greet",
+        "type": "conversation",
+        "name": "Find out why they're calling",
+        "prompt": "Find out what the caller needs.",
+        "edges": [
+          { "to": "details", "when": { "intent": "wants a plumber to come out" } },
+          { "to": "message", "when": { "else": true } }
+        ]
+      },
+      {
+        "id": "details",
+        "type": "collect",
+        "name": "Get the job details",
+        "prompt": "Get the details for the visit.",
+        "fields": ["service_address", "problem"],
+        "then": "book"
+      },
+      {
+        "id": "book",
+        "type": "action",
+        "name": "Book the visit",
+        "action": "book_appointment",
+        "prompt": "Offer two open times and book the one the caller picks.",
+        "then": "goodbye",
+        "on_error": "message"
+      },
+      {
+        "id": "urgent",
+        "type": "action",
+        "name": "Flag the emergency",
+        "action": "flag_urgent",
+        "then": "message"
+      },
+      {
+        "id": "message",
+        "type": "action",
+        "name": "Take a message",
+        "action": "take_message",
+        "prompt": "Take the caller's name and what they need.",
+        "then": "goodbye"
+      },
+      { "id": "goodbye", "type": "end", "name": "Say goodbye", "message": "" }
+    ],
+    "global_edges": [{ "to": "urgent", "when": { "intent": "describes a burst pipe, flooding or a gas smell" } }]
+  },
+  "layout": {
+    "nodes": {
+      "greet": { "x": 0, "y": 0 },
+      "details": { "x": -180, "y": 180 },
+      "book": { "x": -180, "y": 360 },
+      "urgent": { "x": 360, "y": 180 },
+      "message": { "x": 180, "y": 360 },
+      "goodbye": { "x": 0, "y": 540 }
+    }
+  },
+  "fields": [
+    {
+      "key": "service_address",
+      "label": "Service address",
+      "type": "string",
+      "description": "Street address where the work is needed.",
+      "collect": "required",
+      "options": [],
+      "crm_field": null
+    },
+    {
+      "key": "problem",
+      "label": "Problem",
+      "type": "string",
+      "description": "What's wrong, in the caller's words.",
+      "collect": "required",
+      "options": [],
+      "crm_field": null
+    }
+  ],
+  "needs_setup": [],
+  "exported_at": "2026-11-21T15:00:00.000Z"
+}

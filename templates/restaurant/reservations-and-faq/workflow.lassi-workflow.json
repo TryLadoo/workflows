@@ -1,0 +1,269 @@
+{
+  "format": "lassi.workflow",
+  "format_version": 1,
+  "name": "Restaurant reservations and FAQ",
+  "description": "Table bookings, menu and hours questions, and large parties sent to the events team.",
+  "graph": {
+    "start": "reason",
+    "nodes": [
+      {
+        "id": "reason",
+        "type": "conversation",
+        "name": "Find out why they're calling",
+        "prompt": "Find out what the caller needs. Most callers want a table or have a quick question. If they already said it, move on right away.",
+        "edges": [
+          {
+            "to": "party",
+            "when": {
+              "intent": "wants to make a reservation"
+            }
+          },
+          {
+            "to": "events_message",
+            "when": {
+              "intent": "wants to book a private event, a buyout or catering"
+            }
+          },
+          {
+            "to": "questions",
+            "when": {
+              "intent": "has a question about the menu, hours, location, parking, dietary needs or takeout"
+            }
+          },
+          {
+            "to": "change_message",
+            "when": {
+              "intent": "wants to change or cancel a reservation they already have"
+            }
+          },
+          {
+            "to": "decline",
+            "when": {
+              "intent": "is a telemarketer, robocall or sales pitch"
+            }
+          },
+          {
+            "to": "message",
+            "when": {
+              "else": true
+            }
+          }
+        ]
+      },
+      {
+        "id": "questions",
+        "type": "knowledge",
+        "name": "Menu and hours questions",
+        "prompt": "Answer questions about the menu, hours, location, parking, allergens and dietary options, and takeout, from the knowledge base. For takeout and delivery, point them to online ordering if the knowledge base has it. For a serious allergy, say the kitchen will do its best but can't guarantee there's no cross-contact, and suggest they tell their server.",
+        "edges": [
+          {
+            "to": "party",
+            "when": {
+              "intent": "wants to make a reservation"
+            }
+          },
+          {
+            "to": "goodbye",
+            "when": {
+              "intent": "says they're all set"
+            }
+          },
+          {
+            "to": "reason",
+            "when": {
+              "else": true
+            }
+          }
+        ]
+      },
+      {
+        "id": "party",
+        "type": "collect",
+        "name": "Party details",
+        "prompt": "Get the party size and anything the restaurant should know, like a high chair, wheelchair access or a celebration.",
+        "fields": ["party_size", "special_requests"],
+        "optional_fields": ["special_requests"],
+        "then": "size_check"
+      },
+      {
+        "id": "size_check",
+        "type": "code",
+        "name": "Large party?",
+        "code": "// Parties above the limit go to the events team instead of the booking calendar.\nconst size = Number(fields.party_size) || 0;\nconst limit = Number(variables.max_party_size) || 8;\nreturn { large_party: size > limit };",
+        "outputs": ["large_party"],
+        "then": "size_route",
+        "on_error": "book"
+      },
+      {
+        "id": "size_route",
+        "type": "condition",
+        "name": "Route by party size",
+        "edges": [
+          {
+            "to": "events_message",
+            "when": {
+              "variable": "large_party",
+              "equals": true
+            },
+            "label": "Large party"
+          },
+          {
+            "to": "book",
+            "when": {
+              "else": true
+            }
+          }
+        ]
+      },
+      {
+        "id": "book",
+        "type": "action",
+        "name": "Book the table",
+        "action": "book_appointment",
+        "prompt": "Book a table for {{fields.party_size}}. Offer two open times from availability, such as the soonest, or ones near a day the caller already mentioned. If neither works, ask what day or time of day suits them and offer the closest open times. As soon as the caller picks one, book it; don't ask them to confirm first.",
+        "then": "booked",
+        "on_error": "message"
+      },
+      {
+        "id": "booked",
+        "type": "conversation",
+        "name": "Confirm the reservation",
+        "prompt": "The table is booked. Confirm the day, time and party size in one short sentence. Mention how long the restaurant holds a table only if it's in the knowledge base. Then ask if there's anything else.",
+        "edges": [
+          {
+            "to": "goodbye",
+            "when": {
+              "else": true
+            }
+          }
+        ]
+      },
+      {
+        "id": "events_message",
+        "type": "action",
+        "name": "Message for the events team",
+        "action": "take_message",
+        "prompt": "Large parties and private events are booked by the events team. Take a message with the date, the number of guests and what they have in mind. As soon as you have their name, best callback number and what they need, call take_message right away and read the number back in the same reply. Don't ask them to confirm details you already have, and don't wait for another turn first. Never quote minimums or prices.",
+        "then": "message_taken"
+      },
+      {
+        "id": "change_message",
+        "type": "action",
+        "name": "Message about a change",
+        "action": "take_message",
+        "prompt": "Take a message with the name and time of the reservation and what they'd like to change. As soon as you have their name, best callback number and what they need, call take_message right away and read the number back in the same reply. Don't ask them to confirm details you already have, and don't wait for another turn first.",
+        "then": "message_taken"
+      },
+      {
+        "id": "message",
+        "type": "action",
+        "name": "Take a message",
+        "action": "take_message",
+        "prompt": "Take a message for the manager. As soon as you have their name, best callback number and what they need, call take_message right away and read the number back in the same reply. Don't ask them to confirm details you already have, and don't wait for another turn first.",
+        "then": "message_taken"
+      },
+      {
+        "id": "message_taken",
+        "type": "conversation",
+        "name": "Wrap up the message",
+        "prompt": "The message is saved. Tell the caller the restaurant will call back and ask if there's anything else.",
+        "edges": [
+          {
+            "to": "goodbye",
+            "when": {
+              "else": true
+            }
+          }
+        ]
+      },
+      {
+        "id": "decline",
+        "type": "end",
+        "name": "Decline politely",
+        "message": "Politely say the business isn't interested, without sharing any business details."
+      },
+      {
+        "id": "goodbye",
+        "type": "end",
+        "name": "Goodbye"
+      }
+    ]
+  },
+  "layout": {
+    "nodes": {
+      "reason": {
+        "x": 0,
+        "y": 0
+      },
+      "questions": {
+        "x": -750,
+        "y": 180
+      },
+      "party": {
+        "x": -450,
+        "y": 180
+      },
+      "size_check": {
+        "x": -300,
+        "y": 360
+      },
+      "size_route": {
+        "x": -150,
+        "y": 540
+      },
+      "book": {
+        "x": 150,
+        "y": 540
+      },
+      "booked": {
+        "x": 0,
+        "y": 720
+      },
+      "events_message": {
+        "x": -150,
+        "y": 180
+      },
+      "change_message": {
+        "x": 150,
+        "y": 180
+      },
+      "message": {
+        "x": 450,
+        "y": 180
+      },
+      "message_taken": {
+        "x": 0,
+        "y": 360
+      },
+      "decline": {
+        "x": 750,
+        "y": 180
+      },
+      "goodbye": {
+        "x": 300,
+        "y": 360
+      }
+    }
+  },
+  "fields": [
+    {
+      "key": "party_size",
+      "label": "Party size",
+      "type": "number",
+      "description": "How many people, including children.",
+      "collect": "required",
+      "options": [],
+      "crm_field": null
+    },
+    {
+      "key": "special_requests",
+      "label": "Special requests",
+      "type": "string",
+      "description": "Accessibility needs, high chairs, allergies or a celebration.",
+      "collect": "optional",
+      "options": [],
+      "crm_field": null
+    }
+  ],
+  "needs_setup": []
+}
