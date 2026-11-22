@@ -79,8 +79,19 @@ const invalid = [
   ["layout position without y", (wf) => (wf.layout.nodes.greet = { x: 0 })],
   [
     "CRM step with a long tag",
-    (wf) => wf.graph.nodes.push({ id: "crm", type: "lc", add_tags: ["x".repeat(65)], then: "goodbye" }),
+    (wf) => wf.graph.nodes.push({ id: "crm", type: "ghl", add_tags: ["x".repeat(65)], then: "goodbye" }),
   ],
+  ["unknown step type", (wf) => wf.graph.nodes.push({ id: "x", type: "sms", then: "goodbye" })],
+  [
+    "CRM step with an unknown key",
+    (wf) => wf.graph.nodes.push({ id: "crm", type: "ghl", tags: ["a"], then: "goodbye" }),
+  ],
+  [
+    "CRM contact_fields pointing at a bad field key",
+    (wf) =>
+      wf.graph.nodes.push({ id: "crm", type: "ghl", contact_fields: { address1: "Service Address" }, then: "goodbye" }),
+  ],
+  ["then that isn't a step id", (wf) => (node(wf, "book").then = 3)],
 ];
 
 /** Each case should still pass the schema. @type {[string, (wf: any) => void][]} */
@@ -121,8 +132,27 @@ const valid = [
       }),
   ],
   [
-    "CRM step with its own type code",
-    (wf) => wf.graph.nodes.push({ id: "crm", type: "lc", add_tags: ["new-lead"], note: "Hi", then: "goodbye" }),
+    "CRM step as exported",
+    (wf) =>
+      wf.graph.nodes.push({
+        id: "crm",
+        type: "ghl",
+        name: "Tag the lead",
+        note: "New request: {{fields.problem}} at {{fields.service_address}}.",
+        add_tags: ["new-lead", "service-call"],
+        contact_fields: { address1: "service_address" },
+        then: "goodbye",
+        on_error: "goodbye",
+      }),
+  ],
+  ["then: null on a step whose branches carry the flow", (wf) => (node(wf, "greet").then = null)],
+  ["on_error: null", (wf) => (node(wf, "book").on_error = null)],
+  [
+    "layout with extra editor data",
+    (wf) => {
+      wf.layout.viewport = { x: 0, y: 0, zoom: 1 };
+      wf.layout.nodes.greet = { x: 0, y: 0, width: 240 };
+    },
   ],
   [
     "$schema key",

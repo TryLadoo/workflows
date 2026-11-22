@@ -193,13 +193,14 @@ const cases = [
   ],
   ["warning:layout_unknown", "a layout position for a missing step", (wf) => (wf.layout.nodes.ghost = { x: 0, y: 0 })],
   [
-    "warning:unchecked_type",
-    "a CRM step",
+    "error:unknown_field",
+    "a CRM step fills a contact field from a field that isn't defined",
     (wf) => {
-      wf.graph.nodes.push({ id: "crm", type: "lc", add_tags: ["new-lead"], then: "goodbye" });
+      wf.graph.nodes.push({ id: "crm", type: "ghl", contact_fields: { name: "caller_name" }, then: "goodbye" });
       node(wf, "message").then = "crm";
     },
   ],
+  ["error:missing_then", "an action with then: null", (wf) => (node(wf, "message").then = null)],
 ];
 
 for (const [code, name, change] of cases) {
@@ -236,6 +237,39 @@ test("lists the variables a workflow needs, minus the ones its own steps produce
   const { variables, issues } = checkWorkflow(wf);
   assert.deepEqual(issues, []);
   assert.deepEqual(variables, ["base_fee", "business_name", "oncall_number"]);
+});
+
+test("then: null on a knowledge step with branches is fine", () => {
+  const wf = docsExample();
+  wf.graph.nodes.push({
+    id: "faq",
+    type: "knowledge",
+    then: null,
+    edges: [
+      { to: "details", when: { intent: "wants a plumber to come out" } },
+      { to: "goodbye", when: { intent: "says they're all set" } },
+      { to: "greet", when: { else: true } },
+    ],
+  });
+  node(wf, "greet").edges.unshift({ to: "faq", when: { intent: "has a question" } });
+  assert.deepEqual(codes(wf), []);
+});
+
+test("a CRM step is a known type and its fields count as used", () => {
+  const wf = docsExample();
+  wf.graph.nodes.push({
+    id: "crm",
+    type: "ghl",
+    note: "{{fields.problem}}",
+    add_tags: ["new-lead"],
+    contact_fields: { address1: "service_address" },
+    then: "goodbye",
+    on_error: "goodbye",
+  });
+  node(wf, "message").then = "crm";
+  const result = checkWorkflow(wf);
+  assert.deepEqual(result.issues, []);
+  assert.ok(result.fieldsUsed.includes("service_address"));
 });
 
 test("a whole-call branch makes its target reachable", () => {

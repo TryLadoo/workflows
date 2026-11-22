@@ -317,12 +317,26 @@
       }
     },
     "then": {
-      "description": "The step to go to when this one is done.",
-      "$ref": "#/$defs/stepId"
+      "description": "The step to go to when this one is done. null (or leaving it out) means no default next step, when branches carry the flow.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/stepId"
+        },
+        {
+          "type": "null"
+        }
+      ]
     },
     "onError": {
-      "description": "The step to go to when this one fails, like a booking that couldn't be made, a webhook that didn't answer or code that threw.",
-      "$ref": "#/$defs/stepId"
+      "description": "The step to go to when this one fails, like a booking that couldn't be made, a webhook that didn't answer or code that threw. null or left out when there's no failure path.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/stepId"
+        },
+        {
+          "type": "null"
+        }
+      ]
     },
     "prompt": {
       "description": "Instructions for the agent in this step, written like a brief to a new receptionist. Can use {{variables}} and {{fields.<key>}}. Keep facts like prices and hours in the knowledge base.",
@@ -345,25 +359,18 @@
           "$ref": "#/$defs/nodeId"
         },
         "type": {
-          "description": "The step type: conversation, collect, action, condition, knowledge, transfer, code, webhook or end. A CRM (LeadConnector) step has a short code of its own; keep it as exported.",
-          "anyOf": [
-            {
-              "enum": [
-                "conversation",
-                "collect",
-                "action",
-                "condition",
-                "knowledge",
-                "transfer",
-                "code",
-                "webhook",
-                "end"
-              ]
-            },
-            {
-              "type": "string",
-              "minLength": 1
-            }
+          "description": "The step type: conversation (Talk), collect (Collect info), action, condition, knowledge (Answer questions), transfer, code (Custom code), webhook, ghl (LeadConnector CRM) or end (End call).",
+          "enum": [
+            "conversation",
+            "collect",
+            "action",
+            "condition",
+            "knowledge",
+            "transfer",
+            "code",
+            "webhook",
+            "ghl",
+            "end"
           ]
         },
         "name": {
@@ -480,12 +487,12 @@
             "required": ["type"],
             "properties": {
               "type": {
-                "const": "end"
+                "const": "ghl"
               }
             }
           },
           "then": {
-            "$ref": "#/$defs/endStep"
+            "$ref": "#/$defs/crmStep"
           }
         },
         {
@@ -493,22 +500,12 @@
             "required": ["type"],
             "properties": {
               "type": {
-                "enum": [
-                  "conversation",
-                  "collect",
-                  "action",
-                  "condition",
-                  "knowledge",
-                  "transfer",
-                  "code",
-                  "webhook",
-                  "end"
-                ]
+                "const": "end"
               }
             }
           },
-          "else": {
-            "$ref": "#/$defs/crmStep"
+          "then": {
+            "$ref": "#/$defs/endStep"
           }
         }
       ]
@@ -860,7 +857,7 @@
     },
     "crmStep": {
       "title": "LeadConnector (CRM) step",
-      "description": "Updates the caller's contact in the LeadConnector CRM connection while they're on the line. Its `type` is a short code; keep it as exported.",
+      "description": "A LeadConnector (CRM) step: updates the caller's CRM contact while they're on the line, with tags, a note, contact fields and a pipeline stage. A tag can start a CRM automation.",
       "type": "object",
       "additionalProperties": false,
       "properties": {
@@ -868,8 +865,7 @@
           "$ref": "#/$defs/nodeId"
         },
         "type": {
-          "description": "The CRM step's type code, kept as exported.",
-          "type": "string"
+          "const": "ghl"
         },
         "name": {
           "$ref": "#/$defs/nodeName"
@@ -889,7 +885,14 @@
           "maxLength": 5000
         },
         "contact_fields": {
-          "description": "Standard contact fields to fill from collected details, like street address from service_address."
+          "description": "Contact fields to fill from collected details: maps a standard CRM contact key, like \"name\", \"email\" or \"address1\", to the key of a field in `fields`.",
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_]{0,63}$"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/fieldKey"
+          }
         },
         "pipeline_id": {
           "description": "Pipeline to move the opportunity in. Workspace-specific, so export leaves it out.",
@@ -935,7 +938,6 @@
     "layout": {
       "description": "Where each step sits on the canvas. Never affects how calls run. Steps without a position are placed for you.",
       "type": "object",
-      "additionalProperties": false,
       "properties": {
         "nodes": {
           "description": "Maps a step's id to its canvas position.",
@@ -946,7 +948,6 @@
           "additionalProperties": {
             "type": "object",
             "required": ["x", "y"],
-            "additionalProperties": false,
             "properties": {
               "x": {
                 "description": "Horizontal position.",
@@ -956,7 +957,8 @@
                 "description": "Vertical position.",
                 "type": "number"
               }
-            }
+            },
+            "description": "The step's position on the canvas. Other editor data here is kept as is."
           }
         }
       }

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- `then` and `on_error` accept `null`, as real exports store it when branches carry the flow.
+- The LeadConnector (CRM) step is a known type, `ghl`, with `note`, `add_tags`, `contact_fields` and the pipeline keys. `contact_fields` values must be fields in the file.
+- `layout` accepts extra editor data next to each step's `x` and `y`.
+
 ## 0.1.0 (2026-11-22)
 
 - JSON Schema (2020-12) for `.lassi-workflow.json` files, format version 1.
